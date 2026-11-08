@@ -77,7 +77,7 @@ def exercise(browser,device,engine,case):
             page.evaluate('__missionAudio.blockResume=false')
             click('Enable sound')
             page.wait_for_function("__missionAudio.starts>0 && __missionAudio.lastStartState==='running'",timeout=10000)
-            page.get_by_text('Sound enabled.',exact=True).wait_for()
+            page.get_by_text('Sound enabled.',exact=True).first.wait_for()
             # Muting updates both live gains, not just a saved preference flag.
             switch=page.get_by_role('switch').first
             box=switch.bounding_box();assert box
@@ -105,7 +105,7 @@ def main():
             browser=getattr(p,engine).launch(**options)
             try:
                 for device in ([None,p.devices['iPhone 13']] if engine=='webkit' else [None]):
-                    for case in ['asset-retry','storage-denied','storage-quota','audio-activation']:
+                    for case in os.getenv('MISSION_FAULT_CASES','asset-retry,storage-denied,storage-quota,audio-activation').split(','):
                         results.append(exercise(browser,device,engine,case))
             finally:browser.close()
     (OUTPUT/'compatibility-faults.json').write_text(json.dumps(results,indent=2))
