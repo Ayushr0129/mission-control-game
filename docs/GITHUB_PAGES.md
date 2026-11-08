@@ -5,6 +5,7 @@ This is the existing Flutter / Flame game, not a replacement app. All mission de
 ## Repository and intended URL
 
 - Repository: https://github.com/Ayushr0129/mission-control-game
+- Pull request: https://github.com/Ayushr0129/mission-control-game/pull/1
 - Dedicated change branch: `web/github-pages-safari`
 - Default branch: `main`
 - Expected Pages URL **after a successful deployment**: https://ayushr0129.github.io/mission-control-game/
@@ -59,7 +60,7 @@ Use an up-to-date Safari with JavaScript and WebGL enabled. This JavaScript/Canv
 | G | Separate the interstage once T+80 s is reached; unavailable during lunar descent |
 | Tab, Shift+Tab, Enter | Standard Flutter focus navigation and button activation |
 
-Keyboard shortcuts are scoped to the flight screen. The Flame canvas passes them to the same controller methods used by the on-screen controls. The on-screen buttons and sliders remain available on iPhone; a hardware keyboard is optional. Phone layouts scroll vertically instead of shrinking controls below usable sizes. Desktop layouts keep the game view and controls side by side.
+Keyboard shortcuts are scoped to the flight screen. The Flame canvas passes them to the same controller methods used by the on-screen controls. The on-screen buttons and sliders remain available on iPhone; a hardware keyboard is optional. The page viewport stays fixed so Safari's browser scrolling cannot misalign the game canvas and controls. Phone panels use Flutter's internal vertical scrolling instead of shrinking controls below usable sizes. Desktop layouts keep the game view and controls side by side.
 
 ## Slow connection and limited storage
 

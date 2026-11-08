@@ -4,10 +4,9 @@ Requires a running HTTP server. No production game test hooks are added.
 """
 import json
 import os
-import re
 from pathlib import Path
 from urllib.parse import urlsplit
-from playwright.sync_api import sync_playwright, TimeoutError as BrowserTimeout
+from playwright.sync_api import sync_playwright
 
 BASE = os.getenv('MISSION_URL', 'http://127.0.0.1:8080/mission-control-game/').rstrip('/') + '/'
 OUTPUT = Path(os.getenv('MISSION_QA_OUTPUT', 'work/browser-qa'))
@@ -42,28 +41,10 @@ def run_scenario(browser, device=None, engine="browser"):
         results.append(check)
         print(f'{label}: {check}', flush=True)
 
-    def click(text):
-        loc = page.get_by_role('button', name=text, exact=False)
-        if not loc.count():
-            loc = page.get_by_label(text, exact=True)
-        if not loc.count():
-            loc = page.get_by_text(text, exact=False)
-        (loc.first.tap if touch else loc.first.click)(force=True)
-        page.wait_for_timeout(250)
-
-    def ready():
-        page.goto(BASE, wait_until='domcontentloaded')
-        try:
-            node = page.locator('flt-semantics-placeholder')
-            node.wait_for(state='attached', timeout=60000)
-            node.evaluate('(element) => element.click()')
-        except BrowserTimeout:
-            if not page.locator('flt-semantics').count():
-                raise
-        page.get_by_text('Small steps. Infinite possibilities.', exact=True).wait_for(timeout=60000)
-        # Accessibility geometry is useful to locate Flutter controls. Disable
-        # its native pointer overlay so physical input reaches the actual canvas,
-        # as it does in Safari with VoiceOver off (no game test hooks).
+    def canvas_pointer():
+        # The native accessibility overlay exposes a virtual thumb, not the
+        # physical slider. Leave its geometry available for locating controls,
+        # while trusted mouse/touch events reach Flutter's normal canvas input.
         page.locator('flt-semantics-host').evaluate("""host => {
           const disable = node => {
             if(node.style) node.style.setProperty('pointer-events','none','important');
@@ -72,6 +53,71 @@ def run_scenario(browser, device=None, engine="browser"):
           };
           disable(host);
         }""")
+
+    def scroll_game(delta, x):
+        if not touch:
+            page.mouse.move(x, page.viewport_size['height']*.7)
+            page.mouse.wheel(0,delta)
+            return
+        # Playwright's mobile WebKit supports trusted taps, but has no public
+        # swipe API (and rejects mouse-wheel events). Drive the same Flutter
+        # pointer pipeline with a scripted finger swipe to reveal the control.
+        height=page.viewport_size['height']
+        start=height*(.7 if delta>0 else .3)
+        distance=min(abs(delta),height*.4)*(1 if delta>0 else -1)
+        def finger(kind,y):
+            page.locator('flutter-view').evaluate("""(view,p) => {
+              view.dispatchEvent(new PointerEvent(p.kind,{
+                bubbles:true,cancelable:true,pointerId:42,pointerType:'touch',
+                isPrimary:true,buttons:p.kind==='pointerup'?0:1,button:0,
+                pressure:p.kind==='pointerup'?0:.5,width:10,height:10,
+                clientX:p.x,clientY:p.y
+              }));
+            }""",{'kind':kind,'x':x,'y':y})
+        finger('pointerdown',start)
+        for step in range(1,9):
+            finger('pointermove',start-distance*step/8)
+            page.wait_for_timeout(25)
+        page.wait_for_timeout(120)  # Avoid a fling overshooting the target.
+        finger('pointerup',start-distance)
+
+    def visible_box(loc):
+        # DOM scrollIntoView can move the accessibility mirror before Flutter's
+        # canvas has scrolled on iOS. Send real wheel events to the game instead.
+        view = page.viewport_size
+        for _ in range(12):
+            box = loc.bounding_box()
+            if box and box['y'] + box['height']/2 >= 75 and box['y'] + box['height']/2 <= view['height'] - 8:
+                return box
+            assert box, 'Control has no layout bounds'
+            canvas_pointer()
+            scroll_game(box['y']+box['height']/2-view['height']*.55, min(view['width']-25, max(25, box['x']+box['width']/2)))
+            page.wait_for_timeout(250)
+        raise AssertionError('Could not scroll a control into the game viewport')
+
+    def click(text):
+        loc = page.get_by_role('button', name=text, exact=False)
+        if not loc.count():
+            loc = page.get_by_label(text, exact=True)
+        if not loc.count():
+            loc = page.get_by_text(text, exact=False)
+        box = visible_box(loc.first)
+        canvas_pointer()
+        x,y=box['x']+box['width']/2,box['y']+box['height']/2
+        if touch:
+            page.touchscreen.tap(x,y)
+        else:
+            page.mouse.click(x,y)
+        page.wait_for_timeout(250)
+
+    def ready():
+        page.goto(BASE, wait_until='domcontentloaded')
+        page.locator('flt-semantics-placeholder, flt-semantics').first.wait_for(state='attached', timeout=60000)
+        node=page.locator('flt-semantics-placeholder')
+        if node.count():
+            node.evaluate('(element) => element.click()')
+        page.get_by_text('Small steps. Infinite possibilities.', exact=True).wait_for(timeout=60000)
+        canvas_pointer()
 
     def saved():
         return page.evaluate("""key => {
@@ -88,26 +134,18 @@ def run_scenario(browser, device=None, engine="browser"):
 
     def pointer_throttle(fraction):
         slider = page.get_by_role('slider').first
-        slider.scroll_into_view_if_needed()
-        box = slider.bounding_box()
+        box = visible_box(slider)
         assert box, 'Throttle has no hit area'
         # Flutter exposes the accessible *thumb*, not the entire track. The
         # telemetry row supplies the full slider width (24px track padding).
-        percent = re.search(r'\d+', slider.get_attribute('aria-valuetext')).group()
+        percent = str(round(saved()['active']['flight']['throttle'] * 100))
         left = page.get_by_text('MAIN THROTTLE', exact=True).bounding_box()
         right = page.get_by_text(percent + '%', exact=True).first.bounding_box()
         assert left and right
         track_left, track_right = left['x'] + 24, right['x'] + right['width'] - 24
         x = track_left + (track_right - track_left) * fraction
         y = box['y'] + box['height'] / 2
-        page.locator('flt-semantics-host').evaluate("""host => {
-          const disable = node => {
-            if(node.style) node.style.setProperty('pointer-events','none','important');
-            if(node.shadowRoot) disable(node.shadowRoot);
-            for(const child of node.children || []) disable(child);
-          };
-          disable(host);
-        }""")
+        canvas_pointer()
         if touch:
             page.touchscreen.tap(x, y)
         else:
@@ -157,6 +195,8 @@ def run_scenario(browser, device=None, engine="browser"):
         passed('reload restores active flight paused')
         if touch:
             click('Ignition & liftoff')
+            page.get_by_role('button', name='Pause flight', exact=True).wait_for(timeout=5000)
+            passed('touch ignition')
         else:
             page.keyboard.press('Space')
             page.get_by_role('button', name='Pause flight', exact=True).wait_for()
@@ -167,7 +207,7 @@ def run_scenario(browser, device=None, engine="browser"):
         stage = page.get_by_role('button', name='Separate interstage', exact=True)
         stage.wait_for(timeout=90000)
         if touch:
-            stage.tap(force=True)
+            click('Separate interstage')
         else:
             page.keyboard.press('g')
         wait_saved('p.active?.flight?.separated === true')
@@ -189,7 +229,7 @@ def run_scenario(browser, device=None, engine="browser"):
         assert 'Reached Space' in state['achievements']
         passed('campaign reward, unlock, achievement and saved progress')
         # Avoid relying on desktop tooltip text in the compact touch navigation.
-        page.get_by_role('button', name='Discovery', exact=False).first.tap(force=True) if touch else click('Discovery')
+        click('Discovery')
         click('Discover NASA images')
         page.get_by_text('NASA is unreachable right now.', exact=False).wait_for(timeout=15000)
         passed('optional NASA failure leaves offline field notes usable')
