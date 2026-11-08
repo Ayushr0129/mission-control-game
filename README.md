@@ -51,7 +51,8 @@ Budget caps are per mission; programme funds are a separate constraint. A failur
 ## Architecture
 
 ```
-lib/main.dart                    bootstrap, imports and app definition
+lib/main.dart                    imports and app definition
+lib/app/bootstrap.dart           bounded startup, loading errors and retry
 lib/app/controller.dart          navigation, active session orchestration, persistence
 lib/screens/console.dart         responsive shell, overview, missions, briefings
 lib/screens/mission_screens.dart vehicle lab, flight controls, operations, debrief
@@ -61,8 +62,10 @@ lib/services/engineering.dart   mass, cost, power, rocket equation, readiness
 lib/services/flight.dart        deterministic launch integrator and snapshots
 lib/services/operations.dart    anomalies, mission steps, power and lunar descent
 lib/services/campaign.dart      spending, outcomes, progression and achievements
-lib/services/storage.dart       versioned local JSON / SharedPreferences
-lib/services/audio.dart         non-blocking sound playback
+lib/services/storage.dart       versioned local JSON, persistent/session fallback
+lib/services/audio.dart         platform audio export
+lib/services/audio_web.dart     gesture-activated Web Audio, original WAV assets
+lib/services/audio_native.dart  original native audioplayers playback
 lib/game/mission_game.dart      Flame animated flight rendering and time stepping
 lib/widgets/                   reusable controls and original procedural artwork
 assets/data/                   local mission and component JSON

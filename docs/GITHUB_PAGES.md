@@ -74,6 +74,8 @@ Campaign progress is stored locally in Safari's site storage. Clearing website d
 
 - **404 at the expected URL:** Pages is not enabled, the deploy job has not succeeded, the private-repository plan is ineligible, or the URL/path is incorrect. Use the URL reported by the completed deployment.
 - **HTML loads but the game does not:** use the retry button, check the connection, ensure JavaScript/WebGL are enabled, and confirm the generated `<base href="/mission-control-game/">`. Assets, fonts, audio and CanvasKit must also be under that path, not at the origin root.
+- **SESSION ONLY:** Safari storage is blocked or full. Gameplay remains available in the current tab, but reloading loses session progress. Existing inaccessible saves are not deleted. Allow site storage/free space and check for LOCAL SAVE before relying on persistence.
+- **Sound is unavailable:** tap Settings → Enable sound. Browser audio must be activated by a click, tap or key; muted preferences and volume still apply.
 - **Old version remains:** reload the tab. If necessary clear cached files for this site, remembering that clearing all website data also clears campaign progress. No deprecated Flutter service worker is registered by the new build.
 - **Deploy reports 403 or Pages missing:** enable Pages with GitHub Actions as Source and check repository policy/plan. The deploy job needs the workflow's Pages/OIDC permissions. Do not solve this by committing a token.
 - **Blank/error screen on old Safari:** update Safari/iOS and enable WebGL. Cloud WebKit tests are useful compatibility evidence, but are not a physical iPhone or macOS Safari certification.
@@ -94,6 +96,7 @@ ln -s "$PWD/build/web" work/pages-root/mission-control-game
 python -m http.server 8080 --directory work/pages-root
 # In another cloud terminal:
 MISSION_URL=http://127.0.0.1:8080/mission-control-game/ python tool/browser_web_smoke.py
+MISSION_URL=http://127.0.0.1:8080/mission-control-game/ python tool/browser_compat_faults.py
 ```
 
 These are developer/cloud commands, not steps you need to run on your Mac. When serving locally in development, a root build can instead use `--base-href /`. Do not open `index.html` directly from the filesystem.

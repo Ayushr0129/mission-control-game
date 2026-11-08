@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 from urllib.parse import urlsplit
 from playwright.sync_api import sync_playwright
+from browser_audio_probe import AUDIO_PROBE
 
 BASE = os.getenv('MISSION_URL', 'http://127.0.0.1:8080/mission-control-game/').rstrip('/') + '/'
 OUTPUT = Path(os.getenv('MISSION_QA_OUTPUT', 'work/browser-qa'))
@@ -17,6 +18,7 @@ def run_scenario(browser, device=None, engine="browser"):
     touch = device is not None
     label = engine + ('-iphone-touch' if touch else '-desktop')
     context = browser.new_context(**(device or {'viewport': {'width': 1440, 'height': 1000}}))
+    context.add_init_script(AUDIO_PROBE)
     page = context.new_page()
     errors, asset_errors, requests, results = [], [], [], []
     origin = urlsplit(BASE).netloc
@@ -166,6 +168,8 @@ def run_scenario(browser, device=None, engine="browser"):
         click('Solar wings')
         page.get_by_text('FLIGHT READY', exact=True).wait_for()
         passed('builder removal/replacement and live readiness')
+        page.wait_for_function("__missionAudio.starts > 0 && __missionAudio.lastStartState === 'running' && __missionAudio.durations.every(d => d > 0)", timeout=10000)
+        passed('original audio buffers decode and play after a user gesture')
         click('Proceed to launch')
         page.get_by_role('button', name='Ignition & liftoff', exact=True).wait_for()
         pointer_throttle(.6)
@@ -212,7 +216,10 @@ def run_scenario(browser, device=None, engine="browser"):
             page.keyboard.press('g')
         wait_saved('p.active?.flight?.separated === true')
         passed('stage separation')
+        page.wait_for_function('__missionAudio.loopStarts > 0', timeout=10000)
+        passed('engine audio loop starts')
         page.get_by_text('Beyond the launch.', exact=True).wait_for(timeout=90000)
+        page.wait_for_function('__missionAudio.activeLoops.size === 0', timeout=5000)
         for option in ['Shed instrument load', 'Enter safe mode', 'Correct trajectory · 120 m/s']:
             if page.get_by_role('button', name=option, exact=True).count():
                 click(option)

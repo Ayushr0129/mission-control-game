@@ -36,10 +36,11 @@ abstract class MissionController extends State<MissionControl>
     audio.volume = p.volume;
     try {
       discoveries =
-          (jsonDecode(widget.store.prefs.getString('gallery') ?? '[]') as List)
+          (jsonDecode(widget.store.readString('gallery') ?? '[]') as List)
               .map((j) => Map<String, dynamic>.from(j))
               .toList();
     } catch (_) {}
+    saveOk = widget.store.persistent;
     saveTimer = Timer.periodic(const Duration(seconds: 2), (_) => save());
   }
 
