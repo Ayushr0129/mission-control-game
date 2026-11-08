@@ -91,7 +91,12 @@ def run_scenario(browser, device=None, engine="browser"):
             box = loc.bounding_box()
             if box and box['y'] + box['height']/2 >= 75 and box['y'] + box['height']/2 <= view['height'] - 8:
                 return box
-            assert box, 'Control has no layout bounds'
+            if not box:
+                # Flutter may omit off-screen semantics until its panel scrolls.
+                canvas_pointer()
+                scroll_game(view['height'] * .4, view['width'] * .5)
+                page.wait_for_timeout(250)
+                continue
             canvas_pointer()
             scroll_game(box['y']+box['height']/2-view['height']*.55, min(view['width']-25, max(25, box['x']+box['width']/2)))
             page.wait_for_timeout(250)
