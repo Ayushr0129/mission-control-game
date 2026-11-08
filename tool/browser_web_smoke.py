@@ -147,7 +147,7 @@ def run_scenario(browser, device=None, engine="browser"):
             wait_saved('p.active?.flight?.throttle === 1')
             passed('keyboard throttle and pitch')
         else:
-            pointer_throttle(.99)
+            pointer_throttle(1)
             wait_saved('p.active?.flight?.throttle === 1')
         page.screenshot(path=str(OUTPUT / f'{label}-flight-controls.png'))
         click('Save & return to console')
