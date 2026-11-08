@@ -4,6 +4,7 @@ Requires a running HTTP server. No production game test hooks are added.
 """
 import json
 import os
+import re
 from pathlib import Path
 from urllib.parse import urlsplit
 from playwright.sync_api import sync_playwright, TimeoutError as BrowserTimeout
@@ -60,13 +61,27 @@ def run_scenario(browser, device=None, engine="browser"):
             if not page.locator('flt-semantics').count():
                 raise
         page.get_by_text('Small steps. Infinite possibilities.', exact=True).wait_for(timeout=60000)
+        # Accessibility geometry is useful to locate Flutter controls. Disable
+        # its native pointer overlay so physical input reaches the actual canvas,
+        # as it does in Safari with VoiceOver off (no game test hooks).
+        page.locator('flt-semantics-host').evaluate("""host => {
+          const disable = node => {
+            if(node.style) node.style.setProperty('pointer-events','none','important');
+            if(node.shadowRoot) disable(node.shadowRoot);
+            for(const child of node.children || []) disable(child);
+          };
+          disable(host);
+        }""")
 
     def saved():
-        return page.evaluate('(key) => JSON.parse(localStorage.getItem(key))', KEY)
+        return page.evaluate("""key => {
+          const value=JSON.parse(localStorage.getItem(key));
+          return typeof value==='string' ? JSON.parse(value) : value;
+        }""", KEY)
 
     def wait_saved(expression):
         page.wait_for_function(
-            f'() => {{const p=JSON.parse(localStorage.getItem("{KEY}"));return p && ({expression});}}',
+            f'() => {{const raw=JSON.parse(localStorage.getItem("{KEY}")); const p=typeof raw==="string"?JSON.parse(raw):raw;return p && ({expression});}}',
             timeout=8000,
         )
         return saved()
@@ -76,11 +91,27 @@ def run_scenario(browser, device=None, engine="browser"):
         slider.scroll_into_view_if_needed()
         box = slider.bounding_box()
         assert box, 'Throttle has no hit area'
-        x, y = box['x'] + box['width'] * fraction, box['y'] + box['height'] / 2
+        # Flutter exposes the accessible *thumb*, not the entire track. The
+        # telemetry row supplies the full slider width (24px track padding).
+        percent = re.search(r'\d+', slider.get_attribute('aria-valuetext')).group()
+        left = page.get_by_text('MAIN THROTTLE', exact=True).bounding_box()
+        right = page.get_by_text(percent + '%', exact=True).first.bounding_box()
+        assert left and right
+        track_left, track_right = left['x'] + 24, right['x'] + right['width'] - 24
+        x = track_left + (track_right - track_left) * fraction
+        y = box['y'] + box['height'] / 2
+        page.locator('flt-semantics-host').evaluate("""host => {
+          const disable = node => {
+            if(node.style) node.style.setProperty('pointer-events','none','important');
+            if(node.shadowRoot) disable(node.shadowRoot);
+            for(const child of node.children || []) disable(child);
+          };
+          disable(host);
+        }""")
         if touch:
             page.touchscreen.tap(x, y)
         else:
-            page.mouse.move(box['x'] + box['width'] * .8, y)
+            page.mouse.move(box['x'] + box['width'] / 2, y)
             page.mouse.down()
             page.mouse.move(x, y, steps=8)
             page.mouse.up()
