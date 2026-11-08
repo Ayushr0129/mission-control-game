@@ -8,6 +8,10 @@ Four connected campaign missions: reach space, Earth orbit, lunar flyby, and rob
 
 A complete campaign includes funding, public trust, reputation, science, sequential mission unlocks, eight earned achievements, and automatic local saves. Free Play unlocks all four missions and bypasses campaign spending and progression. Historical intermissions are skippable. The NASA gallery is optional, has timeouts and offline field notes, and stores discovery metadata locally. Original procedural art and synthesized sound work offline; mute and volume controls are in Settings.
 
+## Play in Safari without installing developer tools
+
+The existing Flutter / Flame game now has a GitHub Pages workflow, Safari-oriented bootstrap, responsive desktop/mobile controls, and flight keyboard shortcuts. See [the GitHub Pages guide](docs/GITHUB_PAGES.md) for merging the dedicated branch, enabling Pages, the expected URL, bandwidth details and verification limits. A URL is live only after the deployment job succeeds; a pushed branch is not a successful deployment.
+
 ## Requirements and running
 
 - Flutter stable 3.47.9 / Dart 3.13.7 was used for verification. Minimum Dart constraint: 3.10.

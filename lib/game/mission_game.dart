@@ -1,11 +1,13 @@
 import 'dart:math';
 import 'package:flame/game.dart';
+import 'package:flame/events.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../services/flight.dart';
 import '../services/operations.dart';
 import '../widgets/art.dart';
 
-class MissionGame extends FlameGame {
+class MissionGame extends FlameGame with KeyboardEvents {
   final Flight flight;
   final Operations? landing;
   final VoidCallback onTick;
@@ -14,6 +16,11 @@ class MissionGame extends FlameGame {
   MissionGame(this.flight, this.onTick, {this.landing});
   @override
   Color backgroundColor() => ink;
+  // GameWidget otherwise consumes all focused keys. Let the shared Flutter
+  // flight controls handle shortcuts, including when the canvas has focus.
+  @override
+  KeyEventResult onKeyEvent(KeyEvent event, Set<LogicalKeyboardKey> keysPressed) =>
+      KeyEventResult.ignored;
   @override
   void update(double dt) {
     super.update(dt);

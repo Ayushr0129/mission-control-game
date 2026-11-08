@@ -16,6 +16,7 @@ import 'game/mission_game.dart';
 import 'widgets/art.dart';
 import 'widgets/ui.dart';
 import 'widgets/startup.dart';
+import 'widgets/flight_input.dart';
 
 part 'app/controller.dart';
 part 'screens/console.dart';

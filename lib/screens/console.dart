@@ -45,7 +45,14 @@ class _ControlState extends MissionController
                         topBar(wide),
                         Expanded(
                           child: page == 'flight'
-                              ? flightView()
+                              ? FlightInput(
+                                  togglePause: toggleFlightPause,
+                                  pause: pauseFlight,
+                                  stage: separateStage,
+                                  throttle: adjustThrottle,
+                                  pitch: adjustPitch,
+                                  child: flightView(),
+                                )
                               : SingleChildScrollView(
                                   padding: EdgeInsets.fromLTRB(
                                     wide ? 40 : 20,
