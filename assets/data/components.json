@@ -1,0 +1,15 @@
+[
+ {"id":"core","name":"Pathfinder bus","category":"Structure","mass":210,"cost":1.2,"draw":65,"description":"Flight computer, structure, and a 300 Wh battery. Required for every flight."},
+ {"id":"engine1","name":"Pioneer engine","category":"Propulsion","mass":85,"cost":1.3,"isp":320,"thrust":12000,"description":"A light chemical engine. Good for Earth orbit and efficient small payloads."},
+ {"id":"engine2","name":"Voyager engine","category":"Propulsion","mass":135,"cost":2.8,"isp":450,"thrust":18000,"description":"Higher specific impulse saves propellant on lunar transfers. Illustrative high-performance chemical propulsion."},
+ {"id":"tank1","name":"Compact tank","category":"Propellant","mass":45,"cost":0.8,"fuel":350,"description":"350 kg of propellant, plus 45 kg of tank structure."},
+ {"id":"tank2","name":"Transfer tank","category":"Propellant","mass":100,"cost":1.8,"fuel":1400,"description":"More delta-v, but a heavier and more expensive launch payload."},
+ {"id":"tank3","name":"Expedition tank","category":"Propellant","mass":150,"cost":2.7,"fuel":3200,"description":"3200 kg for ambitious missions. Check the launch payload limit."},
+ {"id":"solar1","name":"Solar wings","category":"Electrical","mass":45,"cost":0.9,"power":260,"description":"260 W at Earth–Moon distance in full sunlight. Eclipses reduce output."},
+ {"id":"solar2","name":"High-output array","category":"Electrical","mass":85,"cost":1.7,"power":650,"description":"650 W gives scientific instruments a healthier power margin."},
+ {"id":"antenna1","name":"S-band antenna","category":"Communications","mass":25,"cost":0.5,"draw":30,"range":1,"description":"Earth-local communications. Insufficient for the lunar missions in this game."},
+ {"id":"antenna2","name":"Deep-space dish","category":"Communications","mass":70,"cost":1.4,"draw":75,"range":2,"description":"A directional link suitable for lunar distance. Higher power demand."},
+ {"id":"camera","name":"Survey camera","category":"Science","mass":35,"cost":1.1,"draw":90,"science":1,"description":"Lightweight imaging for atmospheric and Earth observations."},
+ {"id":"spectrometer","name":"Spectral imager","category":"Science","mass":65,"cost":2.2,"draw":180,"science":2,"description":"Richer science requires more mass, power, and funding."},
+ {"id":"legs","name":"Landing assembly","category":"Landing","mass":110,"cost":1.6,"draw":10,"description":"Shock-absorbing legs and a radar altimeter. Required for a soft lunar landing."}
+]
