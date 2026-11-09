@@ -165,7 +165,10 @@ mixin MissionScreens on MissionController {
                 children: categories
                     .map(
                       (c) => ChoiceChip(
-                        label: Text(c, style: const TextStyle(fontSize: 10)),
+                        label: Text(
+                          c,
+                          style: const TextStyle(fontSize: 10, color: white),
+                        ),
                         selected: category == c,
                         onSelected: (_) => setState(() => category = c),
                         selectedColor: cyan.withValues(alpha: .2),
@@ -291,8 +294,8 @@ mixin MissionScreens on MissionController {
       child: Container(
         padding: const EdgeInsets.all(18),
         decoration: BoxDecoration(
-          color: active ? const Color(0xff132d38) : panel,
-          borderRadius: BorderRadius.circular(9),
+          color: active ? const Color(0xff25313a) : panel,
+          borderRadius: BorderRadius.circular(3),
           border: Border.all(
             color: active
                 ? cyan.withValues(alpha: .65)

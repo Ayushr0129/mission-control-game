@@ -138,7 +138,7 @@ class MissionGame extends FlameGame with KeyboardEvents {
       drawRocket(
         c,
         Offset(s.width / 2 + sin(clock * 9) * (!simPaused ? 1 : 0), y),
-        1.05,
+        min(s.height / 360, s.width / 300).clamp(.85, 1.6),
         flame: flight.started && !simPaused && flight.fuel > 0
             ? flight.throttle * (.75 + sin(clock * 21) * .2)
             : 0,
@@ -200,7 +200,7 @@ class MissionGame extends FlameGame with KeyboardEvents {
     instrumentText(
       c,
       'ALT  ${altitude.toStringAsFixed(0)} M',
-      Offset(38, s.height - 48),
+      const Offset(38, 70),
       color: white,
       size: 9,
     );
@@ -209,7 +209,7 @@ class MissionGame extends FlameGame with KeyboardEvents {
       landing == null
           ? 'VEL  ${flight.speed.toStringAsFixed(0)} M/S'
           : 'DESC  ${landing!.descentSpeed.toStringAsFixed(1)} M/S',
-      Offset(38, s.height - 33),
+      const Offset(38, 85),
       size: 9,
     );
     instrumentText(
