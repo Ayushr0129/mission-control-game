@@ -14,7 +14,7 @@ async def main():
    if await loc.count()==0:loc=page.get_by_text(text,exact=False)
    await loc.first.click(force=True);await page.wait_for_timeout(450)
   async def ready():
-   await page.goto(BASE_URL);await page.locator('flt-semantics-placeholder').evaluate('(e)=>e.click()');await page.get_by_text('Small steps. Infinite possibilities.',exact=True).wait_for()
+   await page.goto(BASE_URL);await page.locator('flt-semantics-placeholder').evaluate('(e)=>e.click()');await page.get_by_text('Flight director console.',exact=True).wait_for()
   await ready();print('Offline desktop startup passed',flush=True)
   await click('Enter mission control');await click('Touch the edge');await click('Design spacecraft')
   await page.get_by_text('FLIGHT READY',exact=True).wait_for();await page.screenshot(path=str(OUTPUT/'workshop.png'))
@@ -37,7 +37,7 @@ async def main():
   # Verify the NASA feature fails gracefully with external network blocked.
   await click('Discovery Discovery') if await page.get_by_role('button',name='Discovery Discovery',exact=True).count() else await click('Discovery')
   await click('Discover NASA images');await page.get_by_text('NASA is unreachable right now.',exact=False).wait_for(timeout=15000);print('NASA offline fallback passed',flush=True)
-  mobile=await context.new_page();await mobile.set_viewport_size({'width':390,'height':844});await mobile.goto(BASE_URL);await mobile.locator('flt-semantics-placeholder').evaluate('(e)=>e.click()');await mobile.get_by_text('Small steps. Infinite possibilities.',exact=True).wait_for();await mobile.screenshot(path=str(OUTPUT/'mobile.png'));print('Phone viewport passed',flush=True)
+  mobile=await context.new_page();await mobile.set_viewport_size({'width':390,'height':844});await mobile.goto(BASE_URL);await mobile.locator('flt-semantics-placeholder').evaluate('(e)=>e.click()');await mobile.get_by_text('Flight director console.',exact=True).wait_for();await mobile.screenshot(path=str(OUTPUT/'mobile.png'));print('Phone viewport passed',flush=True)
   assert not errors,errors;print('PASS: no uncaught browser errors',flush=True)
   await browser.close()
 asyncio.run(main())

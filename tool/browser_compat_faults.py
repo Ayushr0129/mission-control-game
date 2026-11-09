@@ -60,7 +60,7 @@ def exercise(browser,device,engine,case):
         if case=='asset-retry':
             page.get_by_text('Core flight data could not be loaded',exact=False).wait_for(timeout=15000)
             click('Retry loading')
-        page.get_by_text('Small steps. Infinite possibilities.',exact=True).wait_for(timeout=60000)
+        page.get_by_text('Flight director console.',exact=True).wait_for(timeout=60000)
         if case in ('storage-denied','storage-quota'):
             page.get_by_text('SESSION ONLY',exact=True).wait_for(timeout=8000)
             page.get_by_text('Session only: progress stays in this tab.',exact=False).wait_for()

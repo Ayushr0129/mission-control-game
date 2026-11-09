@@ -6,7 +6,7 @@ Text label(String s, {Color color = dim, double size = 10}) => Text(
   style: TextStyle(
     fontSize: size,
     fontFamily: 'JetBrainsMono',
-    letterSpacing: 1.7,
+    letterSpacing: 1.1,
     color: color,
     fontWeight: FontWeight.w500,
   ),
@@ -26,8 +26,8 @@ class Plate extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     padding: padding,
     decoration: BoxDecoration(
-      color: color ?? panel.withValues(alpha: .72),
-      borderRadius: BorderRadius.circular(12),
+      color: color ?? panel,
+      borderRadius: BorderRadius.circular(3),
       border: Border.all(color: dim.withValues(alpha: .16)),
     ),
     child: Material(type: MaterialType.transparency, child: child),
@@ -55,7 +55,7 @@ class ActionButton extends StatelessWidget {
       disabledBackgroundColor: dim.withValues(alpha: .15),
       disabledForegroundColor: dim,
       padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 20),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(7)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(3)),
     ),
     icon: Icon(icon, size: 17),
     label: Text(
@@ -86,9 +86,11 @@ class Metric extends StatelessWidget {
           text: value,
           style: TextStyle(
             fontSize: 25,
+            fontFamily: 'JetBrainsMono',
             fontWeight: FontWeight.w500,
             color: color,
             letterSpacing: -1,
+            fontFeatures: const [FontFeature.tabularFigures()],
           ),
           children: [
             TextSpan(
@@ -116,7 +118,7 @@ class Tag extends StatelessWidget {
     decoration: BoxDecoration(
       color: color.withValues(alpha: .08),
       border: Border.all(color: color.withValues(alpha: .2)),
-      borderRadius: BorderRadius.circular(4),
+      borderRadius: BorderRadius.circular(2),
     ),
     child: label(text, color: color, size: 9),
   );
@@ -148,9 +150,9 @@ class PageHeading extends StatelessWidget {
             Text(
               title,
               style: TextStyle(
-                fontSize: MediaQuery.sizeOf(context).width < 600 ? 31 : 40,
+                fontSize: MediaQuery.sizeOf(context).width < 600 ? 27 : 34,
                 fontWeight: FontWeight.w600,
-                letterSpacing: -1.5,
+                letterSpacing: -.6,
               ),
             ),
             ?trailing,

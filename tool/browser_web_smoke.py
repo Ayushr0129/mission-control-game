@@ -123,7 +123,7 @@ def run_scenario(browser, device=None, engine="browser"):
         node=page.locator('flt-semantics-placeholder')
         if node.count():
             node.evaluate('(element) => element.click()')
-        page.get_by_text('Small steps. Infinite possibilities.', exact=True).wait_for(timeout=60000)
+        page.get_by_text('Flight director console.', exact=True).wait_for(timeout=60000)
         canvas_pointer()
 
     def saved():
@@ -173,6 +173,7 @@ def run_scenario(browser, device=None, engine="browser"):
         click('Solar wings')
         page.get_by_text('FLIGHT READY', exact=True).wait_for()
         passed('builder removal/replacement and live readiness')
+        page.screenshot(path=str(OUTPUT / (label + '-builder.png')))
         page.wait_for_function("__missionAudio.starts > 0 && __missionAudio.lastStartState === 'running' && __missionAudio.durations.every(d => d > 0)", timeout=10000)
         passed('original audio buffers decode and play after a user gesture')
         click('Proceed to launch')
@@ -223,6 +224,7 @@ def run_scenario(browser, device=None, engine="browser"):
         passed('stage separation')
         page.wait_for_function('__missionAudio.loopStarts > 0', timeout=10000)
         passed('engine audio loop starts')
+        page.screenshot(path=str(OUTPUT / (label + '-ascent.png')))
         page.get_by_text('Beyond the launch.', exact=True).wait_for(timeout=90000)
         page.wait_for_function('__missionAudio.activeLoops.size === 0', timeout=5000)
         for option in ['Shed instrument load', 'Enter safe mode', 'Correct trajectory · 120 m/s']:

@@ -18,7 +18,7 @@ mixin MissionScreens on MissionController {
       children: [
         PageHeading(
           'VEHICLE LAB / MISSION 0${selected + 1}',
-          'Ambition, engineered.',
+          'Vehicle integration.',
           'Configure ${mission.subtitle.toLowerCase()}. Every kilogram, watt, and dollar matters.',
           trailing: Tag(
             warnings.isEmpty
@@ -41,7 +41,7 @@ mixin MissionScreens on MissionController {
                         children: [
                           Expanded(
                             child: label(
-                              'PATHFINDER / MODULAR ASSEMBLY',
+                              'PATHFINDER / PAYLOAD INTEGRATION',
                               size: 9,
                             ),
                           ),
@@ -50,7 +50,7 @@ mixin MissionScreens on MissionController {
                       ),
                     ),
                     SizedBox(
-                      height: 250,
+                      height: 290,
                       child: CustomPaint(
                         painter: CraftArt(p.design),
                         child: const SizedBox.expand(),
@@ -165,7 +165,10 @@ mixin MissionScreens on MissionController {
                 children: categories
                     .map(
                       (c) => ChoiceChip(
-                        label: Text(c, style: const TextStyle(fontSize: 10)),
+                        label: Text(
+                          c,
+                          style: const TextStyle(fontSize: 10, color: white),
+                        ),
                         selected: category == c,
                         onSelected: (_) => setState(() => category = c),
                         selectedColor: cyan.withValues(alpha: .2),
@@ -189,7 +192,7 @@ mixin MissionScreens on MissionController {
                 ),
               const SizedBox(height: 6),
               Plate(
-                color: const Color(0xff122a34),
+                color: const Color(0xff1b2830),
                 padding: const EdgeInsets.all(16),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -291,8 +294,8 @@ mixin MissionScreens on MissionController {
       child: Container(
         padding: const EdgeInsets.all(18),
         decoration: BoxDecoration(
-          color: active ? const Color(0xff132d38) : panel,
-          borderRadius: BorderRadius.circular(9),
+          color: active ? const Color(0xff25313a) : panel,
+          borderRadius: BorderRadius.circular(3),
           border: Border.all(
             color: active
                 ? cyan.withValues(alpha: .65)
@@ -387,7 +390,7 @@ mixin MissionScreens on MissionController {
               ),
               const SizedBox(height: 17),
               Text(
-                landing ? 'Make a soft arrival.' : 'All eyes on the ascent.',
+                landing ? 'Powered descent.' : 'Ascent control.',
                 style: const TextStyle(
                   fontSize: 24,
                   fontWeight: FontWeight.w600,
@@ -428,6 +431,32 @@ mixin MissionScreens on MissionController {
                   ),
                 ],
               ),
+              const SizedBox(height: 18),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  Tag(game!.simPaused ? 'FLIGHT / HOLD' : 'FLIGHT / RUN'),
+                  if (!landing)
+                    Tag(
+                      f.separated ? 'STAGE / SEPARATED' : 'STAGE / ATTACHED',
+                      color: f.canSeparate ? orange : dim,
+                    ),
+                  Tag(
+                    landing
+                        ? 'GUIDANCE / MANUAL DESCENT'
+                        : 'GUIDANCE / GRAVITY TURN',
+                    color: dim,
+                  ),
+                ],
+              ),
+              if (!landing) ...[
+                const SizedBox(height: 14),
+                label(
+                  'VERTICAL SPEED  ${f.vertical.toStringAsFixed(0)} M/S',
+                  size: 9,
+                ),
+              ],
               const SizedBox(height: 15),
               const Divider(),
               const SizedBox(height: 10),
@@ -525,7 +554,7 @@ mixin MissionScreens on MissionController {
           ),
         );
         final viewport = ClipRRect(
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(3),
           child: Stack(
             children: [
               Positioned.fill(child: GameWidget(game: game!)),

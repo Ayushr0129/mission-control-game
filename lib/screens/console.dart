@@ -137,7 +137,7 @@ class _ControlState extends MissionController
                 : const EdgeInsets.all(12),
             decoration: BoxDecoration(
               color: active ? cyan.withValues(alpha: .09) : Colors.transparent,
-              borderRadius: BorderRadius.circular(7),
+              borderRadius: BorderRadius.circular(3),
             ),
             child: wide
                 ? Row(
@@ -178,7 +178,7 @@ class _ControlState extends MissionController
     return Container(
       width: 207,
       decoration: BoxDecoration(
-        color: const Color(0xff0a131e),
+        color: const Color(0xff15181b),
         border: Border(right: BorderSide(color: dim.withValues(alpha: .14))),
       ),
       child: Column(
@@ -189,7 +189,7 @@ class _ControlState extends MissionController
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(Icons.blur_circular, size: 32, color: cyan),
+                const Icon(Icons.radar, size: 32, color: cyan),
                 const SizedBox(height: 15),
                 const Text(
                   'MISSION\nCONTROL',
@@ -241,7 +241,7 @@ class _ControlState extends MissionController
     child: Row(
       children: [
         if (!wide) ...[
-          const Icon(Icons.blur_circular, color: cyan, size: 24),
+          const Icon(Icons.radar, color: cyan, size: 24),
           const SizedBox(width: 10),
         ],
         label(
@@ -289,9 +289,9 @@ class _ControlState extends MissionController
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         PageHeading(
-          'YOUR NEXT FRONTIER',
-          'Small steps. Infinite possibilities.',
-          'Build with purpose. Fly with confidence. Take your programme beyond the launch.',
+          'FLIGHT OPERATIONS / PROGRAMME STATUS',
+          'Flight director console.',
+          'Review programme resources, configure the flight vehicle, and direct the next mission.',
           trailing: const Tag('CAMPAIGN / 01'),
         ),
         LayoutBuilder(
@@ -334,9 +334,9 @@ class _ControlState extends MissionController
             height: 410,
             clipBehavior: Clip.antiAlias,
             decoration: BoxDecoration(
-              color: const Color(0xff0a1523),
+              color: const Color(0xff12171c),
               border: Border.all(color: dim.withValues(alpha: .18)),
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(3),
             ),
             child: Stack(
               children: [
@@ -349,10 +349,14 @@ class _ControlState extends MissionController
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      label('THE EXPLORATION PROGRAMME', color: cyan, size: 9),
+                      label(
+                        'MISSION PLANNING / TARGET BODY',
+                        color: cyan,
+                        size: 9,
+                      ),
                       const SizedBox(height: 12),
                       const Text(
-                        'A whole universe\nof what comes next.',
+                        'EXPLORATION\nPROGRAMME 01',
                         style: TextStyle(
                           fontSize: 29,
                           fontWeight: FontWeight.w500,
@@ -631,7 +635,7 @@ class _ControlState extends MissionController
             p.completed.contains(widget.missions[i - 1].id);
     return InkWell(
       onTap: unlocked ? () => choose(i) : null,
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(3),
       child: Plate(
         child: Row(
           children: [
