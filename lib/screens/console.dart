@@ -294,6 +294,20 @@ class _ControlState extends MissionController
           'Review programme resources, configure the flight vehicle, and direct the next mission.',
           trailing: const Tag('CAMPAIGN / 01'),
         ),
+        Padding(
+          padding: const EdgeInsets.only(bottom: 20),
+          child: Builder(
+            builder: (routeContext) => ActionButton(
+              'Build & fly a rocket',
+              icon: Icons.rocket_launch_outlined,
+              onPressed: () => Navigator.of(routeContext).push(
+                MaterialPageRoute(
+                  builder: (_) => SimulatorScreen(store: widget.store),
+                ),
+              ),
+            ),
+          ),
+        ),
         LayoutBuilder(
           builder: (c, b) => Wrap(
             spacing: 12,
