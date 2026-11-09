@@ -20,6 +20,7 @@ class MissionAudio {
   bool get musicEnabled => _musicEnabled;
   set musicEnabled(bool value) {
     _musicEnabled = value;
+    _updateVolume();
     if (!value) {
       stopMusic();
     } else if (_context != null) {
