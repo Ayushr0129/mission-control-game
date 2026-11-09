@@ -84,6 +84,11 @@ void main() {
     final e = SandboxFlight(Assembly.starter());
     e.velocity = const Point2(12000, 0);
     expect(e.apoapsis, isNull);
+    e.position = const Point2(0, SandboxFlight.radius + 200000);
+    e.launched = true;
+    e.throttle = 0;
+    e.step(1);
+    expect(e.status, 'Escape trajectory');
   });
   testWidgets('Empty grid constructs the exact three-part flight vehicle', (
     t,

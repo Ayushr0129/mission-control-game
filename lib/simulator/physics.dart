@@ -208,7 +208,9 @@ class SandboxFlight {
             ? 'Landed'
             : 'Impact — redesign or try a different flight path';
         position = position * (radius / position.length);
-      } else if (periapsis > 100000) {
+      } else if (apoapsis == null && altitude > 100000) {
+        status = 'Escape trajectory';
+      } else if (apoapsis != null && periapsis > 100000) {
         status = 'Stable orbit — periapsis above 100 km';
       } else if (altitude > 100000) {
         status = 'Space reached — raise periapsis to stay in orbit';
