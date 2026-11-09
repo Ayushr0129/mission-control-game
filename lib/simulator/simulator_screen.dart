@@ -10,7 +10,8 @@ import 'physics.dart';
 
 class SimulatorScreen extends StatefulWidget {
   final SaveStore store;
-  const SimulatorScreen({super.key, required this.store});
+  final VoidCallback? onInteraction;
+  const SimulatorScreen({super.key, required this.store, this.onInteraction});
   @override
   State<SimulatorScreen> createState() => _SimulatorState();
 }
@@ -106,12 +107,14 @@ class _SimulatorState extends State<SimulatorScreen>
   }
 
   void refresh() {
+    widget.onInteraction?.call();
     if (flight != null) prediction = flight!.predict();
     setState(() {});
     save();
   }
 
   void move(int dx, int dy) {
+    widget.onInteraction?.call();
     final p = selected;
     if (p == null) return;
     final x = p.x + dx, y = p.y + dy;
@@ -130,6 +133,7 @@ class _SimulatorState extends State<SimulatorScreen>
   }
 
   void place(int x, int y) {
+    widget.onInteraction?.call();
     if (x < 0 || x > 8 || y < 0 || y > 11) return;
     setState(() {
       final at = design.parts.where((p) => p.x == x && p.y == y).firstOrNull;
@@ -192,6 +196,7 @@ class _SimulatorState extends State<SimulatorScreen>
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
       return KeyEventResult.ignored;
     }
+    widget.onInteraction?.call();
     final k = event.logicalKey;
     if (flight != null) {
       if (k == LogicalKeyboardKey.keyA) {

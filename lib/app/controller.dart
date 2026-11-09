@@ -36,6 +36,9 @@ abstract class MissionController extends State<MissionControl>
     programme = widget.store.load();
     audio.muted = p.muted;
     audio.volume = p.volume;
+    audio.musicVolume = p.musicVolume;
+    audio.musicEnabled = p.musicEnabled;
+    audio.musicTrack = p.musicTrack;
     try {
       discoveries =
           (jsonDecode(widget.store.readString('gallery') ?? '[]') as List)
@@ -59,6 +62,7 @@ abstract class MissionController extends State<MissionControl>
     if (state != AppLifecycleState.resumed) {
       game?.simPaused = true;
       audio.stop();
+      audio.stopMusic();
       save();
     }
   }
@@ -123,7 +127,13 @@ abstract class MissionController extends State<MissionControl>
       if (ok != true) return;
     }
     setState(() {
-      programme = Programme(muted: p.muted, volume: p.volume);
+      programme = Programme(
+        muted: p.muted,
+        volume: p.volume,
+        musicEnabled: p.musicEnabled,
+        musicVolume: p.musicVolume,
+        musicTrack: p.musicTrack,
+      );
       selected = 0;
       sandbox = false;
       flight = null;

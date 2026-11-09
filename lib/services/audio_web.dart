@@ -9,16 +9,83 @@ class MissionAudio {
   final ValueNotifier<bool> needsGesture = ValueNotifier(false);
   final Map<String, Future<web.AudioBuffer>> _buffers = {};
   web.AudioContext? _context;
-  web.GainNode? _effectsGain, _bedGain;
-  web.AudioBufferSourceNode? _effect, _bed;
+  web.GainNode? _effectsGain, _bedGain, _musicGain;
+  web.AudioBufferSourceNode? _effect, _bed, _music;
   bool _muted = false, _disposed = false;
   double _volume = .35;
-  int _effectSerial = 0, _bedSerial = 0;
+  int _effectSerial = 0, _bedSerial = 0, _musicSerial = 0;
+  bool _musicEnabled = true, _musicPending = false;
+  double _musicVolume = .4;
+  String _musicTrack = 'music_control';
+  bool get musicEnabled => _musicEnabled;
+  set musicEnabled(bool value) {
+    _musicEnabled = value;
+    if (!value) {
+      stopMusic();
+    } else if (_context != null) {
+      unawaited(startMusic());
+    }
+  }
+
+  double get musicVolume => _musicVolume;
+  set musicVolume(double value) {
+    _musicVolume = value.clamp(0, 1);
+    _updateVolume();
+  }
+
+  String get musicTrack => _musicTrack;
+  set musicTrack(String value) {
+    final track = value == 'music_horizon' ? value : 'music_control';
+    if (track == _musicTrack) return;
+    _musicTrack = track;
+    stopMusic();
+    if (_context != null) {
+      unawaited(startMusic());
+    }
+  }
+
+  void stopMusic() {
+    _musicSerial++;
+    _musicPending = false;
+    _stopNode(_music);
+    _music = null;
+  }
+
+  Future<void> startMusic() async {
+    if (_disposed ||
+        _muted ||
+        !_musicEnabled ||
+        _music != null ||
+        _musicPending) {
+      return;
+    }
+    _musicPending = true;
+    final serial = _musicSerial;
+    final unlocked = _unlock();
+    try {
+      if (!await unlocked) return;
+      final buffer = await _buffer(_musicTrack);
+      if (_disposed || _muted || !_musicEnabled || serial != _musicSerial) {
+        return;
+      }
+      final source = _context!.createBufferSource()
+        ..buffer = buffer
+        ..loop = true;
+      source.connect(_musicGain!);
+      source.start();
+      _music = source;
+    } catch (_) {
+      _blocked(true);
+    } finally {
+      if (serial == _musicSerial) _musicPending = false;
+    }
+  }
 
   bool get muted => _muted;
   set muted(bool value) {
     _muted = value;
     if (value) {
+      stopMusic();
       _effectSerial++;
       _bedSerial++;
       _stopNode(_effect);
@@ -37,6 +104,9 @@ class MissionAudio {
   void _updateVolume() {
     _effectsGain?.gain.value = _muted ? 0 : _volume;
     _bedGain?.gain.value = _muted ? 0 : _volume * .45;
+    _musicGain?.gain.value = _muted || !_musicEnabled
+        ? 0
+        : _volume * _musicVolume;
   }
 
   web.AudioContext _getContext() {
@@ -45,6 +115,7 @@ class MissionAudio {
       _context = context;
       _effectsGain = context.createGain()..connect(context.destination);
       _bedGain = context.createGain()..connect(context.destination);
+      _musicGain = context.createGain()..connect(context.destination);
       _updateVolume();
     }
     return _context!;
@@ -74,7 +145,8 @@ class MissionAudio {
 
   Future<web.AudioBuffer> _buffer(String name) async {
     final future = _buffers.putIfAbsent(name, () async {
-      final data = await rootBundle.load('assets/audio/$name.wav');
+      final extension = name.startsWith('music_') ? 'mp3' : 'wav';
+      final data = await rootBundle.load('assets/audio/$name.$extension');
       // decodeAudioData may detach its input; do not detach Flutter's asset cache.
       final copy = Uint8List.fromList(
         data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes),
@@ -85,12 +157,15 @@ class MissionAudio {
       return await future;
     } catch (_) {
       _buffers.remove(name); // A failed media fetch can be retried.
-      rootBundle.evict('assets/audio/$name.wav');
+      rootBundle.evict(
+        'assets/audio/$name.${name.startsWith('music_') ? 'mp3' : 'wav'}',
+      );
       rethrow;
     }
   }
 
   Future<void> play(String name) async {
+    unawaited(startMusic());
     if (_disposed || _muted) return;
     final serial = ++_effectSerial;
     final unlocked = _unlock();
@@ -110,6 +185,7 @@ class MissionAudio {
   }
 
   Future<void> loop(String name) async {
+    unawaited(startMusic());
     if (_disposed || _muted) return;
     final serial = ++_bedSerial;
     _stopNode(_bed);
@@ -161,6 +237,7 @@ class MissionAudio {
 
   void dispose() {
     _disposed = true;
+    stopMusic();
     _effectSerial++;
     _bedSerial++;
     _stopNode(_bed);

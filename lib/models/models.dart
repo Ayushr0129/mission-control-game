@@ -47,6 +47,9 @@ class Programme {
   bool muted;
   double volume;
   String launcherId;
+  bool musicEnabled;
+  double musicVolume;
+  String musicTrack;
   Programme({
     this.funding = 45,
     this.trust = 70,
@@ -61,6 +64,9 @@ class Programme {
     this.muted = false,
     this.volume = .35,
     this.launcherId = 'standard',
+    this.musicEnabled = true,
+    this.musicVolume = .4,
+    this.musicTrack = 'music_control',
   }) : completed = completed ?? {},
        achievements = achievements ?? {},
        design =
@@ -82,6 +88,9 @@ class Programme {
     'muted': muted,
     'volume': volume,
     'launcherId': launcherId,
+    'musicEnabled': musicEnabled,
+    'musicVolume': musicVolume,
+    'musicTrack': musicTrack,
   };
   factory Programme.fromJson(Map<String, dynamic> j) => Programme(
     funding: (j['funding'] as num).toDouble(),
@@ -97,5 +106,10 @@ class Programme {
     muted: j['muted'] ?? false,
     volume: (j['volume'] ?? .35).toDouble(),
     launcherId: j['launcherId'] ?? 'standard',
+    musicEnabled: j['musicEnabled'] ?? true,
+    musicVolume: ((j['musicVolume'] ?? .4) as num).toDouble().clamp(0, 1),
+    musicTrack: j['musicTrack'] == 'music_horizon'
+        ? 'music_horizon'
+        : 'music_control',
   );
 }
