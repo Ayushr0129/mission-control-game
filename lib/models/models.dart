@@ -46,6 +46,7 @@ class Programme {
   Map<String, dynamic>? active;
   bool muted;
   double volume;
+  String launcherId;
   Programme({
     this.funding = 45,
     this.trust = 70,
@@ -59,6 +60,7 @@ class Programme {
     this.active,
     this.muted = false,
     this.volume = .35,
+    this.launcherId = 'standard',
   }) : completed = completed ?? {},
        achievements = achievements ?? {},
        design =
@@ -79,6 +81,7 @@ class Programme {
     'active': active,
     'muted': muted,
     'volume': volume,
+    'launcherId': launcherId,
   };
   factory Programme.fromJson(Map<String, dynamic> j) => Programme(
     funding: (j['funding'] as num).toDouble(),
@@ -93,5 +96,6 @@ class Programme {
     active: j['active'] == null ? null : Map<String, dynamic>.from(j['active']),
     muted: j['muted'] ?? false,
     volume: (j['volume'] ?? .35).toDouble(),
+    launcherId: j['launcherId'] ?? 'standard',
   );
 }

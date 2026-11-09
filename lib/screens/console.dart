@@ -1,7 +1,7 @@
 part of '../main.dart';
 
 class _ControlState extends MissionController
-    with MissionScreens, ExtrasScreens {
+    with MissionScreens, ExtrasScreens, PlanningScreens {
   @override
   Widget build(BuildContext context) {
     final theme = ThemeData(

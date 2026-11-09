@@ -103,3 +103,9 @@ This is a hackathon MVP with four missions, not a comprehensive aerospace simula
 Planned improvements: computed periapsis and apogee, actual multistage propulsion, coupled lunar propellant mass, more campaigns, optional cloud backup, native device performance testing and broader accessibility verification.
 
 Optional browser flow regression: install Python Playwright, serve the web build on port 8080, then run `python3 tool/browser_e2e.py`. Set `CHROMIUM_PATH` to a Chromium executable and optionally `MISSION_URL` and `MISSION_QA_OUTPUT`. This script blocks requests outside the local game origin to verify core offline behavior. It writes screenshots under `work/browser-qa` by default.
+
+## Mission design trade-offs
+
+The Vehicle Lab now includes a mission requirements review and three fictional launchers. Scout lowers procurement cost but limits payload to 1,500 kg; the original Atlas training launcher supports 5,000 kg; Titan costs more and supports 8,000 kg. Selection changes actual launch mass, thrust and propellant as well as campaign expenditure. Spacecraft manoeuvre reserve, science and communications requirements remain independent of launcher size. Recommended designs reset to the original launcher.
+
+Review budget, payload, power and manoeuvre margins before launch. Pin a design, change a subsystem or launcher, and compare resource changes; the comparison is kept for the current app session only. Existing campaign saves default to the original launcher, and new saves retain the selected launcher and active-flight configuration. Post-mission debriefs show the design resources and science transmitted. Launcher prices and scaling are illustrative training models, not real vehicle specifications. Solo play is supported; online multiplayer and arbitrary orbit design are not implemented.

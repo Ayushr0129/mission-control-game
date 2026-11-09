@@ -15,9 +15,16 @@ class Flight {
   bool separated = false, started = false;
   String? failure;
   final double payload;
-  Flight(this.payload);
-  double get mass => fuel + 8500 + payload + (separated ? 0 : 6000);
-  double get fuelFraction => fuel / 180000;
+  LaunchVehicle launcher;
+  Flight(this.payload, {this.launcher = LaunchVehicle.standard}) {
+    fuel = 180000 * launcher.scale;
+  }
+  double get mass =>
+      fuel +
+      8500 * launcher.scale +
+      payload +
+      (separated ? 0 : 6000 * launcher.scale);
+  double get fuelFraction => fuel / (180000 * launcher.scale);
   double get speed => sqrt(vertical * vertical + horizontal * horizontal);
   double get circularSpeed => sqrt(3.986004418e14 / (6371000 + altitude));
   bool achieved(bool orbit) =>
@@ -34,8 +41,11 @@ class Flight {
   void step(double dt) {
     if (!started || failure != null || !dt.isFinite || dt <= 0) return;
     time += dt;
-    final burn = min(fuel, 3000000 * throttle / (390 * g0) * dt);
-    final actual = burn / (3000000 / (390 * g0) * dt);
+    final burn = min(
+      fuel,
+      3000000 * launcher.scale * throttle / (390 * g0) * dt,
+    );
+    final actual = burn / (3000000 * launcher.scale / (390 * g0) * dt);
     fuel -= burn;
     final gravity = g0 * pow(6371000 / (6371000 + max(altitude, 0)), 2);
     // A timed gravity turn is a training aid; the player can bias pitch ±15°.
@@ -43,7 +53,7 @@ class Flight {
         ((90 - (time - 35).clamp(0, 120) * .75) + guidance).clamp(0, 90) *
         pi /
         180;
-    final acceleration = 3000000 * actual / mass;
+    final acceleration = 3000000 * launcher.scale * actual / mass;
     final drag =
         .5 * 1.225 * exp(-max(altitude, 0) / 8500) * speed * speed * 4 / mass;
     vertical +=
@@ -76,6 +86,7 @@ class Flight {
   }
 
   Map<String, dynamic> toJson() => {
+    'launcherId': launcher.id,
     'time': time,
     'altitude': altitude,
     'vertical': vertical,
@@ -88,6 +99,7 @@ class Flight {
     'failure': failure,
   };
   void restore(Map<String, dynamic> j) {
+    launcher = LaunchVehicle.fromId(j['launcherId']);
     time = (j['time'] as num).toDouble();
     altitude = (j['altitude'] as num).toDouble();
     vertical = (j['vertical'] as num).toDouble();

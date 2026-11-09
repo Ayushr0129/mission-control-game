@@ -44,6 +44,28 @@ void main() {
     await t.pump(const Duration(milliseconds: 300));
   }
 
+  testWidgets('Mission design pins comparisons and launches selected vehicle', (
+    t,
+  ) async {
+    final store = await mount(t);
+    await tap(t, 'Enter mission control');
+    await tap(t, 'Touch the edge');
+    await tap(t, 'Design spacecraft');
+    await tap(t, 'Pin design for comparison');
+    await tap(t, 'Scout light launcher · \$3M · 1500 kg');
+    expect(find.textContaining('Cost -2.0 M'), findsOneWidget);
+    await tap(t, 'Proceed to launch');
+    final game =
+        (t.widget(find.byWidgetPredicate((w) => w is GameWidget)) as GameWidget)
+                .game
+            as MissionGame;
+    expect(game.flight.launcher.id, 'light');
+    expect(store.load().launcherId, 'light');
+    expect(store.load().funding, closeTo(36.2, .001));
+    expect(t.takeException(), isNull);
+    await t.pumpWidget(const SizedBox());
+  });
+
   testWidgets(
     'Phone flow: plan, change a component, launch, save and resume paused',
     (t) async {

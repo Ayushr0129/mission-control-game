@@ -25,8 +25,10 @@ abstract class MissionController extends State<MissionControl>
       'Browse offline mission stories, or connect to the NASA Image Library.';
   Programme get p => programme;
   Mission get mission => widget.missions[selected];
-  Engineering get craft =>
-      Engineering(widget.parts.where((x) => p.design.contains(x.id)).toList());
+  Engineering get craft => Engineering(
+    widget.parts.where((x) => p.design.contains(x.id)).toList(),
+    launcher: LaunchVehicle.fromId(p.launcherId),
+  );
   @override
   void initState() {
     super.initState();
@@ -144,7 +146,7 @@ abstract class MissionController extends State<MissionControl>
     selected = a['mission'];
     sandbox = a['sandbox'];
     settled = false;
-    flight = Flight(craft.wetMass)
+    flight = Flight(craft.wetMass, launcher: craft.launcher)
       ..restore(Map<String, dynamic>.from(a['flight']));
     ops = a['ops'] == null
         ? null
@@ -201,6 +203,7 @@ abstract class MissionController extends State<MissionControl>
 
   void loadRecommended() {
     setState(() {
+      p.launcherId = 'standard';
       p.design = [
         'core',
         selected >= 2 ? 'engine2' : 'engine1',
@@ -231,7 +234,7 @@ abstract class MissionController extends State<MissionControl>
     if (!sandbox) {
       Campaign.launch(p, craft.cost);
     }
-    flight = Flight(craft.wetMass);
+    flight = Flight(craft.wetMass, launcher: craft.launcher);
     ops = null;
     settled = false;
     landingActive = false;
