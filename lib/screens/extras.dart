@@ -318,19 +318,9 @@ mixin ExtrasScreens on MissionController {
                 save();
               },
             ),
-            DropdownButtonFormField<String>(
-              initialValue: p.musicTrack,
-              decoration: const InputDecoration(labelText: 'Music track'),
-              items: const [
-                DropdownMenuItem(
-                  value: 'music_control',
-                  child: Text('Mission Control · calm'),
-                ),
-                DropdownMenuItem(
-                  value: 'music_horizon',
-                  child: Text('Beyond the Horizon · upbeat'),
-                ),
-              ],
+            label('MUSIC TRACK'),
+            RadioGroup<String>(
+              groupValue: p.musicTrack,
               onChanged: (v) {
                 if (v == null) return;
                 setState(() => p.musicTrack = v);
@@ -338,6 +328,26 @@ mixin ExtrasScreens on MissionController {
                 audio.startMusic();
                 save();
               },
+              child: Column(
+                children: const [
+                  RadioListTile<String>(
+                    contentPadding: EdgeInsets.zero,
+                    value: 'music_control',
+                    title: Text(
+                      'Mission Control · calm',
+                      style: TextStyle(fontSize: 13),
+                    ),
+                  ),
+                  RadioListTile<String>(
+                    contentPadding: EdgeInsets.zero,
+                    value: 'music_horizon',
+                    title: Text(
+                      'Beyond the Horizon · upbeat',
+                      style: TextStyle(fontSize: 13),
+                    ),
+                  ),
+                ],
+              ),
             ),
             const SizedBox(height: 16),
             label('MUSIC VOLUME'),

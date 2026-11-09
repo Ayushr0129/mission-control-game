@@ -97,7 +97,6 @@ def scenario(browser,device,engine):
         click('Settings')
         page.wait_for_function('__missionAudio.musicStarts>0 && __missionAudio.musicLoops.size===1',timeout=15000)
         page.wait_for_function('[...__missionAudio.musicLoops][0].buffer.duration>47')
-        click('Mission Control · calm')
         click('Beyond the Horizon · upbeat')
         page.wait_for_function('__missionAudio.musicLoops.size===1 && [...__missionAudio.musicLoops][0].buffer.duration<33',timeout=15000)
         switch=page.get_by_role('switch',name='Background music',exact=False)
