@@ -105,6 +105,8 @@ def run_scenario(browser, device=None, engine="browser"):
     def click(text):
         loc = page.get_by_role('button', name=text, exact=False)
         if not loc.count():
+            loc = page.get_by_role('radio', name=text, exact=False)
+        if not loc.count():
             loc = page.get_by_label(text, exact=True)
         if not loc.count():
             loc = page.get_by_text(text, exact=False)
@@ -167,6 +169,11 @@ def run_scenario(browser, device=None, engine="browser"):
         click('Enter mission control')
         click('Touch the edge')
         click('Design spacecraft')
+        click('Pin design for comparison')
+        click('Scout light launcher · $3M · 1500 kg')
+        page.get_by_text('Cost -2.0 M', exact=False).wait_for()
+        click('Atlas training launcher · $5M · 5000 kg')
+        passed('launcher selection and pinned engineering comparison')
         click('Electrical')
         click('Solar wings')
         page.get_by_text('Power demand exceeds generation', exact=False).wait_for()

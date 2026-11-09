@@ -1,6 +1,7 @@
 part of '../main.dart';
 
 mixin MissionScreens on MissionController {
+  Widget missionPlanning();
   Widget workshop() {
     final e = craft,
         warnings = e.warnings(mission, p.funding, sandbox: sandbox);
@@ -27,6 +28,8 @@ mixin MissionScreens on MissionController {
             color: warnings.isEmpty ? cyan : orange,
           ),
         ),
+        missionPlanning(),
+        const SizedBox(height: 20),
         adaptive(
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -132,7 +135,7 @@ mixin MissionScreens on MissionController {
                     const Divider(),
                     const SizedBox(height: 10),
                     Text(
-                      'Dry mass ${e.dryMass.round()} kg  •  Propellant ${e.fuel.round()} kg\nIsp ${e.isp.round()} s  •  Engine ${(e.thrust / 1000).round()} kN\nLiftoff TWR ${e.twr.toStringAsFixed(2)}  •  Payload limit 5,000 kg\nPower ${e.generation.round()} W generated / ${e.consumption.round()} W used\nLink ${e.range == 2
+                      'Dry mass ${e.dryMass.round()} kg  •  Propellant ${e.fuel.round()} kg\nIsp ${e.isp.round()} s  •  Engine ${(e.thrust / 1000).round()} kN\nLiftoff TWR ${e.twr.toStringAsFixed(2)}  •  Payload limit ${e.launcher.capacity.round()} kg\nPower ${e.generation.round()} W generated / ${e.consumption.round()} W used\nLink ${e.range == 2
                           ? 'lunar'
                           : e.range == 1
                           ? 'Earth-local'
@@ -868,6 +871,25 @@ mixin MissionScreens on MissionController {
           color: resultSuccess ? cyan : orange,
         ),
       ),
+      Plate(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            label('ENGINEERING DEBRIEF', color: cyan),
+            const SizedBox(height: 12),
+            Text(
+              'Launcher: ${craft.launcher.name} · Design cost: \$${craft.cost.toStringAsFixed(1)}M\nPayload: ${craft.wetMass.round()} / ${craft.launcher.capacity.round()} kg · Initial power margin: ${craft.netPower.round()} W\nSpacecraft Δv: ${craft.deltaV.round()} m/s · Required with reserve: ${(mission.deltaV + 150).round()} m/s\nScience transmitted: ${resultSuccess ? ops?.observations ?? 0 : 0}',
+              style: const TextStyle(color: dim, fontSize: 12, height: 1.8),
+            ),
+            const SizedBox(height: 10),
+            const Text(
+              'For your next attempt: pin the design, change one subsystem, and compare its cost, mass, power and manoeuvre reserve. Science that cannot be transmitted does not count toward programme science.',
+              style: TextStyle(color: dim, fontSize: 12, height: 1.7),
+            ),
+          ],
+        ),
+      ),
+      const SizedBox(height: 20),
       adaptive(
         SizedBox(
           height: 350,

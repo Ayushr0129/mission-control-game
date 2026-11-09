@@ -23,6 +23,7 @@ part 'app/bootstrap.dart';
 part 'screens/console.dart';
 part 'screens/mission_screens.dart';
 part 'screens/extras.dart';
+part 'screens/planning.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();

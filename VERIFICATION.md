@@ -79,3 +79,9 @@ The `design/mission-control-console` branch introduces a restrained graphite/blu
 Simulation rules, mission data, save format, audio and shared keyboard/mouse/touch handlers remain unchanged. This is a visual treatment inspired by mission-control instrumentation, not a claim of NASA affiliation or engineering fidelity. Existing educational assumptions still apply. Browser checks retain complete mission/control coverage and now capture builder/ascent screenshots for visual review. Home-page assertions were updated to the new operational heading.
 
 Cloud checks: 31 Flutter tests passed, Flutter analysis clean, 3 Python packaging tests passed. Release-build and browser outcomes for the exact pushed commit are recorded in its PR checks. Production is unchanged until this branch is merged.
+
+## Mission planning and launcher trade-offs
+
+Added mission requirements, explicit resource margins, session-only pinned design comparison, three launcher choices with actual procurement/flight consequences, and engineering debriefs. The original launcher remains the default for old campaigns/flights. New snapshots include launcher identity. Readiness TWR now includes the inert interstage consistently with the flight integrator. Payload-capacity checks apply in Free Play; only financial limits are waived. Model regressions cover costs/capacity, live dynamics, snapshot continuation and legacy migration; a phone widget regression covers comparison, launcher selection and campaign debit. Browser scenarios also select and compare launchers before completing the existing mission. Exact release and browser results are available in PR checks.
+
+This iteration retains the four authored destinations and mission operations. It does not introduce arbitrary orbit selection, real-world launcher data, multiplayer, or network collaboration.
