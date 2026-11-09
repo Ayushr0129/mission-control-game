@@ -300,11 +300,19 @@ class _ControlState extends MissionController
             builder: (routeContext) => ActionButton(
               'Build & fly a rocket',
               icon: Icons.rocket_launch_outlined,
-              onPressed: () => Navigator.of(routeContext).push(
-                MaterialPageRoute(
-                  builder: (_) => SimulatorScreen(store: widget.store),
-                ),
-              ),
+              onPressed: () {
+                audio.play('click');
+                Navigator.of(routeContext).push(
+                  MaterialPageRoute(
+                    builder: (_) => SimulatorScreen(
+                      store: widget.store,
+                      onInteraction: () {
+                        audio.startMusic();
+                      },
+                    ),
+                  ),
+                );
+              },
             ),
           ),
         ),

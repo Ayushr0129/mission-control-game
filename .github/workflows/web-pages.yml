@@ -95,6 +95,7 @@ jobs:
           python tool/browser_web_smoke.py
           python tool/browser_compat_faults.py
           python tool/browser_simulator_smoke.py
+          python tool/browser_music_smoke.py
       - name: Upload browser evidence
         if: always()
         uses: actions/upload-artifact@v4

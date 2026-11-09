@@ -2,7 +2,7 @@
 AUDIO_PROBE = r"""
 (() => {
   const probe = window.__missionAudio = {
-    starts:0, loopStarts:0, stops:0, resumeCalls:0, blockResume:false,
+    starts:0, loopStarts:0, musicStarts:0, musicLoops:new Set(), stops:0, resumeCalls:0, blockResume:false,
     contexts:[], gains:[], activeLoops:new Set(), durations:[], lastStartState:null
   };
   const NativeContext=window.AudioContext;
@@ -26,12 +26,12 @@ AUDIO_PROBE = r"""
   AudioBufferSourceNode.prototype.start=function(...args) {
     probe.starts++;probe.lastStartState=this.context.state;
     probe.durations.push(this.buffer?.duration ?? 0);
-    if(this.loop) { probe.loopStarts++;probe.activeLoops.add(this); }
+    if(this.loop) { if(this.buffer.duration>10) {probe.musicStarts++;probe.musicLoops.add(this);} else {probe.loopStarts++;probe.activeLoops.add(this);} }
     return start.apply(this,args);
   };
   const stop=AudioBufferSourceNode.prototype.stop;
   AudioBufferSourceNode.prototype.stop=function(...args) {
-    probe.stops++;probe.activeLoops.delete(this);return stop.apply(this,args);
+    probe.stops++;probe.activeLoops.delete(this);probe.musicLoops.delete(this);return stop.apply(this,args);
   };
 })();
 """

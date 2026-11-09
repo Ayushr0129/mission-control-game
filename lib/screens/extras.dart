@@ -249,7 +249,7 @@ mixin ExtrasScreens on MissionController {
               contentPadding: EdgeInsets.zero,
               title: const Text('Mute audio', style: TextStyle(fontSize: 16)),
               subtitle: const Text(
-                'Original synthesized sounds and ambience',
+                'Original sound effects and instrumental music',
                 style: TextStyle(fontSize: 11, color: dim),
               ),
               value: p.muted,
@@ -257,6 +257,9 @@ mixin ExtrasScreens on MissionController {
                 setState(() => p.muted = v);
                 audio.muted = v;
                 audio.stop();
+                if (!v) {
+                  audio.startMusic();
+                }
                 save();
               },
             ),
@@ -298,6 +301,65 @@ mixin ExtrasScreens on MissionController {
                   ],
                 ),
               ),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Background music'),
+              subtitle: const Text(
+                'Original instrumental songs · bundled, no streaming',
+                style: TextStyle(color: dim, fontSize: 11),
+              ),
+              value: p.musicEnabled,
+              onChanged: (v) {
+                setState(() => p.musicEnabled = v);
+                audio.musicEnabled = v;
+                if (v) {
+                  audio.startMusic();
+                }
+                save();
+              },
+            ),
+            label('MUSIC TRACK'),
+            RadioGroup<String>(
+              groupValue: p.musicTrack,
+              onChanged: (v) {
+                if (v == null) return;
+                setState(() => p.musicTrack = v);
+                audio.musicTrack = v;
+                audio.startMusic();
+                save();
+              },
+              child: Column(
+                children: const [
+                  RadioListTile<String>(
+                    contentPadding: EdgeInsets.zero,
+                    value: 'music_control',
+                    title: Text(
+                      'Mission Control · calm',
+                      style: TextStyle(fontSize: 13),
+                    ),
+                  ),
+                  RadioListTile<String>(
+                    contentPadding: EdgeInsets.zero,
+                    value: 'music_horizon',
+                    title: Text(
+                      'Beyond the Horizon · upbeat',
+                      style: TextStyle(fontSize: 13),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            label('MUSIC VOLUME'),
+            Slider(
+              value: p.musicVolume,
+              onChanged: (v) {
+                setState(() => p.musicVolume = v);
+                audio.musicVolume = v;
+                save();
+              },
+            ),
+            const SizedBox(height: 12),
             label('MASTER VOLUME'),
             Slider(
               value: p.volume,
