@@ -48,7 +48,7 @@ void main() {
     'Phone flow: plan, change a component, launch, save and resume paused',
     (t) async {
       final store = await mount(t);
-      expect(find.text('Small steps. Infinite possibilities.'), findsOneWidget);
+      expect(find.text('Flight director console.'), findsOneWidget);
       await tap(t, 'Enter mission control');
       await tap(t, 'Touch the edge');
       await tap(t, 'Design spacecraft');
