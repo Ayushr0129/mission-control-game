@@ -193,8 +193,25 @@ class SandboxFlight {
       }
       final speed = velocity.length;
       final density = 1.225 * exp(-max(altitude, 0) / 8500);
+      final width = craft.parts.isEmpty
+          ? 1
+          : craft.parts.map((p) => p.x).reduce(max) -
+                craft.parts.map((p) => p.x).reduce(min) +
+                1;
+      final length = craft.parts.isEmpty
+          ? 1
+          : craft.parts.map((p) => p.y).reduce(max) -
+                craft.parts.map((p) => p.y).reduce(min) +
+                1;
+      final axial = speed == 0
+          ? 1.0
+          : (sin(angle) * velocity.x + cos(angle) * velocity.y).abs() / speed;
+      final sideways = speed == 0
+          ? 0.0
+          : (cos(angle) * velocity.x - sin(angle) * velocity.y).abs() / speed;
+      final area = 4 * (width * axial + length * sideways);
       final drag =
-          velocity * (-.5 * density * .3 * 4 * speed / max(craft.mass, 1));
+          velocity * (-.5 * density * .3 * area * speed / max(craft.mass, 1));
       final acceleration = force * (1 / max(craft.mass, 1)) + drag;
       final g = gravity(position);
       final next = position + velocity * h + (g + acceleration) * (.5 * h * h);

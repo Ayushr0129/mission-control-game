@@ -122,6 +122,7 @@ def scenario(browser,device,engine):
         click('Separate stage')
         wait_for('p.flight.parts.length===5')
         click('Pause simulation')
+        page.get_by_text('Resume simulation',exact=True).wait_for()
         page.screenshot(path=str(OUTPUT/(label+'-map.png')))
         flight=read()['flight'];assert flight['time']>0
         page.reload()

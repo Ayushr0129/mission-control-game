@@ -855,7 +855,10 @@ class FlightPainter extends CustomPainter {
         ),
       );
       final scale = s.shortestSide * .44 / extent * zoom;
-      final center = Offset(s.width / 2, s.height / 2);
+      final focus = max(0.0, 1 - 1 / zoom);
+      final center =
+          Offset(s.width / 2, s.height / 2) -
+          Offset(f.position.x * scale, -f.position.y * scale) * focus;
       Offset screen(Point2 p) => center + Offset(p.x * scale, -p.y * scale);
       c.drawCircle(
         center,

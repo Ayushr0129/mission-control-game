@@ -52,6 +52,33 @@ void main() {
       expect(copy.toJson(), tilted.toJson());
     },
   );
+  test(
+    'Assembly width changes atmospheric drag and engine mounting changes thrust',
+    () {
+      final slim = SandboxFlight(Assembly.starter())
+        ..launched = true
+        ..throttle = 0;
+      final wide = SandboxFlight(Assembly.starter())
+        ..launched = true
+        ..throttle = 0;
+      for (var i = 0; i < wide.craft.parts.length; i++) {
+        wide.craft.parts[i].x = i;
+        wide.craft.parts[i].y = 5;
+      }
+      for (final f in [slim, wide]) {
+        f.position = const Point2(0, SandboxFlight.radius + 10000);
+        f.velocity = const Point2(0, 100);
+        f.step(.1);
+      }
+      expect(wide.velocity.y, lessThan(slim.velocity.y));
+      final rotated = SandboxFlight(Assembly.starter())..launched = true;
+      rotated.craft.parts.last.rotation = 1;
+      rotated.position = const Point2(0, SandboxFlight.radius + 200000);
+      rotated.step(.1);
+      expect(rotated.velocity.x, greaterThan(0));
+    },
+  );
+
   test('Circular orbit conserves energy and reports orbital elements', () {
     final f = SandboxFlight(Assembly.starter())
       ..launched = true
