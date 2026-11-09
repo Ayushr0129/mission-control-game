@@ -18,6 +18,7 @@ abstract class MissionController extends State<MissionControl>
   MissionGame? game;
   final audio = MissionAudio();
   Timer? saveTimer;
+  final appNavigator = GlobalKey<NavigatorState>();
   final messenger = GlobalKey<ScaffoldMessengerState>();
   List<Map<String, dynamic>> discoveries = [];
   bool searching = false;
@@ -68,7 +69,7 @@ abstract class MissionController extends State<MissionControl>
   }
 
   Future<void> save() async {
-    if (flight != null && !settled) {
+    if (flight != null && !settled && p.active?['stage'] != 'assembly') {
       p.active = {
         'mission': selected,
         'sandbox': sandbox,
@@ -145,12 +146,51 @@ abstract class MissionController extends State<MissionControl>
     audio.loop('ambient');
   }
 
+  void openAssemblyMission(int index) {
+    if (p.active != null &&
+        (p.active?['stage'] != 'assembly' || p.active?['mission'] != index)) {
+      toast('Continue or abandon your active mission first.');
+      return;
+    }
+    final unlocked =
+        index == 0 || p.completed.contains(widget.missions[index - 1].id);
+    if (!unlocked) {
+      toast('Complete the previous mission first.');
+      return;
+    }
+    audio.play('click');
+    appNavigator.currentState
+        ?.push(
+          MaterialPageRoute(
+            builder: (_) => SimulatorScreen(
+              store: widget.store,
+              programme: p,
+              mission: widget.missions[index],
+              missionIndex: index,
+              onInteraction: () => audio.startMusic(),
+            ),
+          ),
+        )
+        .then((_) {
+          if (mounted) {
+            setState(() {
+              programme = widget.store.load();
+              page = 'home';
+            });
+          }
+        });
+  }
+
   void continueMission() {
     final a = p.active;
     if (a == null) {
       sandbox = false;
       selected = p.completed.length.clamp(0, 3);
       go('missions');
+      return;
+    }
+    if (a['stage'] == 'assembly') {
+      openAssemblyMission(a['mission']);
       return;
     }
     selected = a['mission'];

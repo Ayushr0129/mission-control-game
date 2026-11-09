@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mission_control/simulator/physics.dart';
+import 'package:mission_control/simulator/catalogue.dart';
 import 'package:mission_control/simulator/simulator_screen.dart';
 import 'package:mission_control/services/storage.dart';
 
@@ -136,16 +137,23 @@ void main() {
     await t.tap(find.text('Start empty'));
     await t.pumpAndSettle();
     for (final entry in [('capsule', 1), ('tank', 2), ('engine', 3)]) {
-      await t.ensureVisible(find.text(entry.$1).first);
-      await t.tap(find.text(entry.$1).first);
+      await t.ensureVisible(find.text(PartSpec.get(entry.$1).name).first);
+      await t.tap(find.text(PartSpec.get(entry.$1).name).first);
       await t.pump();
-      final box = t.getRect(find.byKey(const ValueKey('assembly-grid')));
+      final render = t.renderObject<RenderBox>(
+        find.byKey(const ValueKey('assembly-grid')),
+      );
+      final box = Rect.fromPoints(
+        render.localToGlobal(Offset.zero),
+        render.localToGlobal(Offset(render.size.width, render.size.height)),
+      );
       final cell = box.width / 9;
       await t.tapAt(
         Offset(box.left + 4.5 * cell, box.top + (entry.$2 + .5) * cell),
       );
       await t.pump();
     }
+    await t.ensureVisible(find.text('Launch assembled rocket'));
     await t.ensureVisible(find.text('Launch assembled rocket'));
     await t.tap(find.text('Launch assembled rocket'));
     await t.pump();
@@ -179,9 +187,11 @@ void main() {
         home: SimulatorScreen(store: store),
       ),
     );
+    await t.ensureVisible(find.text('Launch assembled rocket'));
     await t.tap(find.text('Launch assembled rocket'));
     await t.pump();
     expect(find.text('Ignite & launch'), findsOneWidget);
+    await t.ensureVisible(find.text('Ignite & launch'));
     await t.tap(find.text('Ignite & launch'));
     await t.pump(const Duration(seconds: 2));
     await t.ensureVisible(find.text('Trajectory map'));

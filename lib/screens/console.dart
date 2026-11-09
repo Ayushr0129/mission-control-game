@@ -27,6 +27,7 @@ class _ControlState extends MissionController
       ),
     );
     return MaterialApp(
+      navigatorKey: appNavigator,
       title: 'MISSION CONTROL — Beyond the Launch',
       debugShowCheckedModeBanner: false,
       theme: theme,
@@ -106,7 +107,8 @@ class _ControlState extends MissionController
     final items = [
       ('home', Icons.space_dashboard_outlined, 'Overview'),
       ('missions', Icons.public, 'Missions'),
-      ('workshop', Icons.handyman_outlined, 'Vehicle lab'),
+      ('assembly', Icons.rocket_launch_outlined, 'Rocket assembly'),
+      ('workshop', Icons.handyman_outlined, 'Subsystem planner'),
       ('achievements', Icons.workspace_premium_outlined, 'Milestones'),
       ('gallery', Icons.photo_library_outlined, 'Discovery'),
       ('settings', Icons.tune, 'Settings'),
@@ -120,6 +122,14 @@ class _ControlState extends MissionController
         message: item.$3,
         child: InkWell(
           onTap: () {
+            if (item.$1 == 'assembly') {
+              openAssemblyMission(
+                p.active?['stage'] == 'assembly'
+                    ? p.active!['mission']
+                    : p.completed.length.clamp(0, 3),
+              );
+              return;
+            }
             if (item.$1 == 'workshop' && p.active != null) {
               toast(
                 'Finish or abandon your active flight before editing the spacecraft.',
@@ -316,6 +326,28 @@ class _ControlState extends MissionController
             ),
           ),
         ),
+        Padding(
+          padding: const EdgeInsets.only(bottom: 16),
+          child: ActionButton(
+            'Build rocket for campaign mission',
+            icon: Icons.assignment_outlined,
+            onPressed: () =>
+                openAssemblyMission(p.completed.length.clamp(0, 3)),
+          ),
+        ),
+        if (p.assemblyReport != null)
+          TextButton(
+            onPressed: () => showDialog(
+              context: appNavigator.currentContext!,
+              builder: (c) => AlertDialog(
+                title: const Text('Assembled mission debrief'),
+                content: Text(
+                  '${p.assemblyReport!['mission']}\n${p.assemblyReport!['reason']}\nLaunch cost \$${p.assemblyReport!['cost']}M · Science ${p.assemblyReport!['science']}',
+                ),
+              ),
+            ),
+            child: const Text('Last assembled mission report'),
+          ),
         LayoutBuilder(
           builder: (c, b) => Wrap(
             spacing: 12,
@@ -784,13 +816,14 @@ class _ControlState extends MissionController
                 width: double.infinity,
                 child: ActionButton(
                   'Design spacecraft',
-                  onPressed: () => go('workshop'),
+                  onPressed: () => openAssemblyMission(selected),
                 ),
               ),
+
               TextButton(
                 onPressed: () => go('workshop'),
                 child: const Text(
-                  'Skip history → vehicle lab',
+                  'Subsystem design planner',
                   style: TextStyle(color: dim, fontSize: 11),
                 ),
               ),

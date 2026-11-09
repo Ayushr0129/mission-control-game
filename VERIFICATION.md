@@ -95,3 +95,11 @@ The coast predictor is not a planned powered trajectory. The flight lab is the f
 ## Music mixing
 
 Added two original bundled MP3 instrumental scores, independent looping music gain/player, saved track/on-off/volume preferences, master mute handling, background lifecycle suspension and simulator interaction activation. Effects and engine loops retain their separate channels. Web Audio resumes before asynchronous asset decoding so Safari gesture activation is retained. Browser instrumentation distinguishes long music loops from the original short engine/ambience loops; music tests verify no autoplay before a gesture, actual MP3 decoding/start, switching between 48/32-second tracks, disabling music and persistence across reload. Legacy/default and round-trip preference tests are included. Exact release/browser outcomes are in PR checks; physical audible playback on Mac/iPhone hardware is not claimed.
+
+## Integrated construction acceptance work
+
+Inspected the live GitHub Pages build using certificate-verified asset requests and a fresh browser context; its original builder still had five generic types and no integrated campaign path. The new primary mission design route uses physical construction. Legacy subsystem design remains explicitly accessible.
+
+New regression coverage includes typed part differences, footprints/overlaps, mouse and touch catalogue drags, duplicate/undo/redo/rotation/pan, side-booster stage order, crossfeed/propellant compatibility, old physical-save fuel migration, real surface-to-orbit flight and coast stability, launch debit/restore/idempotent reward, and completion of all four mission models using retained resource budgets. Lunar descent testing controls actual thrust/fuel under Moon gravity. Browser acceptance scripts exercise construction, campaign continuation and science/reward, and the orbital example without production state injection. See PR checks for exact current build/browser outcomes.
+
+Physics and operational abstractions are detailed in docs/ROCKET_ASSEMBLY.md. Nothing in this branch is merged or deployed automatically from a PR.

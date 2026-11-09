@@ -50,6 +50,8 @@ class Programme {
   bool musicEnabled;
   double musicVolume;
   String musicTrack;
+  Set<String> assemblySettlements;
+  Map<String, dynamic>? assemblyReport;
   Programme({
     this.funding = 45,
     this.trust = 70,
@@ -67,7 +69,10 @@ class Programme {
     this.musicEnabled = true,
     this.musicVolume = .4,
     this.musicTrack = 'music_control',
-  }) : completed = completed ?? {},
+    Set<String>? assemblySettlements,
+    this.assemblyReport,
+  }) : assemblySettlements = assemblySettlements ?? {},
+       completed = completed ?? {},
        achievements = achievements ?? {},
        design =
            design ??
@@ -91,6 +96,8 @@ class Programme {
     'musicEnabled': musicEnabled,
     'musicVolume': musicVolume,
     'musicTrack': musicTrack,
+    'assemblySettlements': assemblySettlements.toList(),
+    'assemblyReport': assemblyReport,
   };
   factory Programme.fromJson(Map<String, dynamic> j) => Programme(
     funding: (j['funding'] as num).toDouble(),
@@ -106,6 +113,10 @@ class Programme {
     muted: j['muted'] ?? false,
     volume: (j['volume'] ?? .35).toDouble(),
     launcherId: j['launcherId'] ?? 'standard',
+    assemblySettlements: Set<String>.from(j['assemblySettlements'] ?? []),
+    assemblyReport: j['assemblyReport'] == null
+        ? null
+        : Map<String, dynamic>.from(j['assemblyReport']),
     musicEnabled: j['musicEnabled'] ?? true,
     musicVolume: ((j['musicVolume'] ?? .4) as num).toDouble().clamp(0, 1),
     musicTrack: j['musicTrack'] == 'music_horizon'

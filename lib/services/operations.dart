@@ -6,6 +6,7 @@ class Operations {
   final Mission mission;
   final Engineering craft;
   late double deltaV;
+  double batteryCapacity;
   double battery = 300,
       arrayFactor = 1,
       scienceFactor = 1,
@@ -17,7 +18,7 @@ class Operations {
   bool eventResolved = false, safeMode = false, link = true, landed = false;
   String? failure;
   late int event;
-  Operations(this.mission, this.craft, int seed) {
+  Operations(this.mission, this.craft, int seed, {this.batteryCapacity = 300}) {
     deltaV = craft.deltaV;
     event = Random(seed).nextInt(3);
   }
@@ -90,7 +91,7 @@ class Operations {
     final demand = safeMode ? craft.consumption * .6 : craft.consumption;
     battery =
         (battery + (craft.generation * arrayFactor - demand) * minutes / 60)
-            .clamp(0, 300);
+            .clamp(0, batteryCapacity);
     check();
     return failure == null;
   }
