@@ -105,6 +105,8 @@ def run_scenario(browser, device=None, engine="browser"):
     def click(text):
         loc = page.get_by_role('button', name=text, exact=False)
         if not loc.count():
+            loc = page.get_by_role('radio', name=text, exact=False)
+        if not loc.count():
             loc = page.get_by_label(text, exact=True)
         if not loc.count():
             loc = page.get_by_text(text, exact=False)
