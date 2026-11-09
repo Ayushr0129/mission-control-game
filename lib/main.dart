@@ -17,6 +17,7 @@ import 'widgets/art.dart';
 import 'widgets/ui.dart';
 import 'widgets/startup.dart';
 import 'widgets/flight_input.dart';
+import 'simulator/simulator_screen.dart';
 
 part 'app/controller.dart';
 part 'app/bootstrap.dart';
