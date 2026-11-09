@@ -44,10 +44,19 @@ class Controls:
         return p.get_by_text(name,exact=True).first
     def box(self,name):
         p=self.page;h=p.viewport_size['height']
+        # Flutter retains semantics for clipped scroll children. On phones the
+        # catalogue/control panel starts below the canvas; a DOM box above it
+        # cannot receive a real finger gesture even when Playwright calls it visible.
+        floor=75
+        if self.touch:
+            for label in ['Rocket assembly grid','Vehicle tracking view','Flight trajectory map']:
+                canvas=p.get_by_role('img',name=label,exact=True)
+                bounds=canvas.bounding_box() if canvas.count() else None
+                if bounds:floor=max(floor,min(h*.6,bounds['y']+bounds['height']+8))
         for attempt in range(24):
             node=self.locate(name);box=node.bounding_box() if node.count() else None
-            if box and 75<box['y']+box['height']/2<h-65:return box
-            delta=(box['y']+box['height']/2-h*.65) if box else (-500 if attempt<8 else 500)
+            if box and floor<box['y']+box['height']/2<h-65:return box
+            delta=(box['y']+box['height']/2-h*(.8 if self.touch else .65)) if box else (-500 if attempt<8 else 500)
             self.scroll(delta)
         raise AssertionError('Control not reachable: '+name)
     def tap(self,name):

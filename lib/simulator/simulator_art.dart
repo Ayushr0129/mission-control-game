@@ -325,7 +325,10 @@ class FlightPainter extends CustomPainter {
       c.drawCircle(
         center,
         f.body.radius * scale,
-        Paint()..color = const Color(0xff244558),
+        Paint()
+          ..color = (f.body.atmosphere
+              ? const Color(0xff244558)
+              : const Color(0xff626970)),
       );
       c.drawCircle(
         center,
@@ -407,7 +410,9 @@ class FlightPainter extends CustomPainter {
             colors: [
               ink,
               Color.lerp(
-                const Color(0xff527e98),
+                f.body.atmosphere
+                    ? const Color(0xff527e98)
+                    : const Color(0xff222428),
                 ink,
                 (altitude / 100000).clamp(0, 1),
               )!,
@@ -434,7 +439,10 @@ class FlightPainter extends CustomPainter {
         final ground = min(s.height - 15, s.height * .65 + altitude * .15);
         c.drawRect(
           Rect.fromLTWH(0, ground, s.width, s.height),
-          Paint()..color = const Color(0xff293832),
+          Paint()
+            ..color = (f.body.atmosphere
+                ? const Color(0xff293832)
+                : const Color(0xff555b61)),
         );
       }
       c.save();
