@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
   <!--
     If you are serving your web app in a path other than the root, change the
@@ -18,12 +18,14 @@
 
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  <meta name="description" content="A new Flutter project.">
+  <meta name="description" content="Build spacecraft, manage a mission, and fly to the Moon. A Flutter and Flame engineering game.">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#070e18">
 
   <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <meta name="apple-mobile-web-app-title" content="mission_control">
+  <meta name="apple-mobile-web-app-title" content="Mission Control">
   <link rel="apple-touch-icon" href="icons/Icon-192.png">
 
   <!-- Favicon -->
@@ -39,8 +41,8 @@
     <p style="color:#8195a8;font-size:11px;letter-spacing:3px">BEYOND THE LAUNCH</p>
     <p style="color:#71e3df;font-size:9px;letter-spacing:2px;margin-top:40px">INITIALISING FLIGHT SYSTEMS</p>
   </div>
-  <style>@keyframes float{50%{transform:translateY(-10px);opacity:.5}}</style>
-  <script>window.addEventListener('flutter-first-frame',()=>document.getElementById('boot')?.remove());</script>
+  <style>html,body{width:100%;height:100%;overflow:hidden;overscroll-behavior:none}body{position:fixed;inset:0}@keyframes float{50%{transform:translateY(-10px);opacity:.5}}</style>
+  <script>window.addEventListener('flutter-first-frame',()=>{const boot=document.getElementById('boot');if(boot && boot.dataset.failed!=='true')boot.remove();});</script>
   <!--
     You can customize the "flutter_bootstrap.js" script.
     This is useful to provide a custom configuration to the Flutter loader
@@ -49,6 +51,22 @@
     For more details:
     * https://docs.flutter.dev/platform-integration/web/initialization
   -->
-  <script src="flutter_bootstrap.js" async></script>
+  <noscript><p style="padding:24px;color:#eef3f5">This game needs JavaScript enabled in Safari. No developer tools or app installation are required.</p></noscript>
+  <script>
+    window.showMissionLoadError = function () {
+      let boot = document.getElementById('boot');
+      if (!boot) {
+        boot = document.createElement('div');
+        boot.id = 'boot';
+        boot.style.cssText = 'position:fixed;inset:0;z-index:9999;display:grid;place-content:center;text-align:center;background:#070e18;color:#eef3f5;font-family:Arial,sans-serif';
+        document.body.appendChild(boot);
+      }
+      boot.dataset.failed = 'true';
+      if (boot) {
+        boot.innerHTML = '<h1>Flight systems could not load</h1><p style="max-width:440px;padding:20px">Check your connection, allow JavaScript and WebGL in Safari, then retry. The first visit downloads the game; later visits can reuse browser-cached files.</p><button onclick="location.reload()" style="padding:14px;border:0;background:#71e3df;color:#070e18;cursor:pointer">Retry loading</button>';
+      }
+    };
+  </script>
+  <script src="flutter_bootstrap.js" onerror="showMissionLoadError()" async></script>
 </body>
 </html>

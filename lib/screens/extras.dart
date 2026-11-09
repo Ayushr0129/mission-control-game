@@ -118,7 +118,7 @@ mixin ExtrasScreens on MissionController {
         galleryStatus =
             'NASA Image and Video Library · Images remain subject to their credited rights.';
       });
-      await widget.store.prefs.setString('gallery', jsonEncode(images));
+      await widget.store.writeString('gallery', jsonEncode(images));
     } catch (_) {
       if (mounted) {
         setState(
@@ -219,8 +219,10 @@ mixin ExtrasScreens on MissionController {
                 const SizedBox(height: 14),
                 label('CREDIT: ${image['credit']} · NASA LIBRARY', size: 8),
                 const SizedBox(height: 8),
-                const Text(
-                  'Metadata saved locally. Full-resolution images require a connection.',
+                Text(
+                  widget.store.persistent
+                      ? 'Metadata saved locally. Full-resolution images require a connection.'
+                      : 'Metadata kept for this tab only. Device storage is unavailable.',
                   style: TextStyle(color: dim, fontSize: 10),
                 ),
               ],
@@ -232,10 +234,12 @@ mixin ExtrasScreens on MissionController {
   Widget settings() => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      const PageHeading(
+      PageHeading(
         'CONSOLE PREFERENCES',
         'Your mission. Your pace.',
-        'Progress is saved on this device. No account or permanent connection is required.',
+        saveOk
+            ? 'Progress is saved on this device. No account or permanent connection is required.'
+            : 'Session-only mode: progress stays in this tab while device storage is unavailable.',
       ),
       Plate(
         child: Column(
@@ -257,6 +261,43 @@ mixin ExtrasScreens on MissionController {
               },
             ),
             const SizedBox(height: 12),
+            if (kIsWeb)
+              ValueListenableBuilder<bool>(
+                valueListenable: audio.needsGesture,
+                builder: (context, blocked, child) => Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      blocked
+                          ? 'Safari could not start sound. Tap Enable sound to retry. Gameplay remains available.'
+                          : 'Browser sound starts after a click, tap, or key. You can enable it here.',
+                      style: TextStyle(
+                        color: blocked ? orange : dim,
+                        fontSize: 12,
+                        height: 1.7,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    ActionButton(
+                      'Enable sound',
+                      secondary: true,
+                      icon: Icons.volume_up_outlined,
+                      onPressed: () async {
+                        setState(() => p.muted = false);
+                        final enabled = await audio.enable();
+                        if (!mounted) return;
+                        toast(
+                          enabled
+                              ? 'Sound enabled.'
+                              : 'Sound is still unavailable. Check Safari audio permissions and try again.',
+                        );
+                        save();
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                ),
+              ),
             label('MASTER VOLUME'),
             Slider(
               value: p.volume,
@@ -274,7 +315,7 @@ mixin ExtrasScreens on MissionController {
             Text(
               saveOk
                   ? 'Campaign, spacecraft, achievements, and active flight are saved every two seconds and at important decisions. A resumed flight starts paused.'
-                  : 'Storage could not be written. Browser private mode or a full device may prevent saving.',
+                  : 'Progress is kept for this tab only. Reloading will lose it. Allow website storage or free device space, then reload to use persistent saves.',
               style: const TextStyle(color: dim, fontSize: 12, height: 1.8),
             ),
             const SizedBox(height: 18),

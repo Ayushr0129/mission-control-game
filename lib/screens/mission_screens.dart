@@ -445,13 +445,9 @@ mixin MissionScreens on MissionController {
                 value: landing ? o!.landingThrottle : f.throttle,
                 min: 0,
                 max: 1,
-                onChanged: (v) => setState(() {
-                  if (landing) {
-                    o!.landingThrottle = v;
-                  } else {
-                    f.throttle = v;
-                  }
-                }),
+                key: const ValueKey('flight-throttle'),
+                divisions: 100,
+                onChanged: setThrottle,
                 semanticFormatterCallback: (v) =>
                     'Throttle ${(v * 100).round()} percent',
               ),
@@ -464,10 +460,13 @@ mixin MissionScreens on MissionController {
                   ],
                 ),
                 Slider(
+                  key: const ValueKey('flight-pitch'),
                   value: f.guidance,
                   min: -15,
                   max: 15,
                   divisions: 30,
+                  semanticFormatterCallback: (v) =>
+                      'Pitch bias ${v.round()} degrees',
                   onChanged: (v) => setState(() => f.guidance = v),
                 ),
                 Text(
@@ -481,13 +480,8 @@ mixin MissionScreens on MissionController {
                       : f.canSeparate
                       ? 'Separate interstage'
                       : 'Separation unlocks at T+80 s',
-                  onPressed: f.canSeparate
-                      ? () {
-                          f.separate();
-                          setState(() {});
-                          audio.play('click');
-                        }
-                      : null,
+                  key: const ValueKey('flight-stage'),
+                  onPressed: f.canSeparate ? separateStage : null,
                   secondary: true,
                   icon: Icons.layers_outlined,
                 ),
@@ -499,18 +493,8 @@ mixin MissionScreens on MissionController {
                           ? 'Resume flight'
                           : 'Ignition & liftoff')
                     : 'Pause flight',
-                onPressed: () {
-                  setState(() {
-                    game!.simPaused = !game!.simPaused;
-                    if (!landing) f.started = true;
-                  });
-                  if (game!.simPaused) {
-                    audio.stop();
-                    save();
-                  } else {
-                    audio.loop('engine');
-                  }
-                },
+                key: const ValueKey('flight-pause'),
+                onPressed: toggleFlightPause,
                 icon: game!.simPaused ? Icons.play_arrow : Icons.pause,
               ),
               const SizedBox(height: 10),
@@ -523,6 +507,10 @@ mixin MissionScreens on MissionController {
                 style: const TextStyle(color: dim, fontSize: 11, height: 1.7),
               ),
               const SizedBox(height: 8),
+              const Text(
+                'Keyboard: Space launch/pause · Esc pause · W/S throttle · A/D pitch · G stage. Mouse and touch: use the same buttons and sliders.',
+                style: TextStyle(color: dim, fontSize: 10, height: 1.7),
+              ),
               TextButton(
                 onPressed: () {
                   game!.simPaused = true;

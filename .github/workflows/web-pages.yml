@@ -1,0 +1,127 @@
+name: Web game and GitHub Pages
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  FLUTTER_REVISION: c197ca5199e9ee5661e865596c9c07294dfab51c
+  FLUTTER_SUPPRESS_ANALYTICS: 'true'
+  DASH__SUPPRESS_ANALYTICS: 'true'
+
+concurrency:
+  group: pages-${{ github.event_name == 'pull_request' && github.ref || 'production' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Cache cloud Flutter SDK and public packages
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ runner.temp }}/flutter
+            ${{ runner.temp }}/pub-cache
+          key: ${{ runner.os }}-flutter-${{ env.FLUTTER_REVISION }}-${{ hashFiles('pubspec.lock') }}
+          restore-keys: ${{ runner.os }}-flutter-${{ env.FLUTTER_REVISION }}-
+      - name: Prepare the verified Flutter SDK (cloud only)
+        shell: bash
+        run: |
+          sdk="$RUNNER_TEMP/flutter"
+          export PUB_CACHE="$RUNNER_TEMP/pub-cache"
+          echo "PUB_CACHE=$PUB_CACHE" >> "$GITHUB_ENV"
+          if [[ ! -x "$sdk/bin/flutter" ]]; then
+            git clone --depth 1 --branch 3.47.9 https://github.com/flutter/flutter.git "$sdk"
+          fi
+          test "$(git -C "$sdk" rev-parse HEAD)" = "$FLUTTER_REVISION"
+          echo "$sdk/bin" >> "$GITHUB_PATH"
+          "$sdk/bin/flutter" --version
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Resolve dependencies
+        run: flutter pub get
+      - name: Analyze and test the existing game
+        run: |
+          flutter analyze
+          flutter test
+          python -m unittest discover -s tool -p '*_test.py'
+      - name: Set repository base path
+        id: path
+        shell: bash
+        run: |
+          repo_name="${GITHUB_REPOSITORY#*/}"
+          base_href="/${repo_name}/"
+          if [[ "${repo_name,,}" == "${GITHUB_REPOSITORY_OWNER,,}.github.io" ]]; then
+            base_href="/"
+          fi
+          echo "base_href=${base_href}" >> "$GITHUB_OUTPUT"
+      - name: Build release web game in the cloud
+        env:
+          BASE_HREF: ${{ steps.path.outputs.base_href }}
+        run: |
+          flutter build web --release --base-href "$BASE_HREF" --no-web-resources-cdn --no-wasm-dry-run
+          python tool/prepare_web.py --base-href "$BASE_HREF"
+      - name: Install browser QA tools (cloud runner only)
+        run: |
+          python -m pip install -r tool/browser-requirements.txt
+          python -m playwright install --with-deps webkit chromium
+      - name: Test WebKit desktop, iPhone touch, and Chromium controls
+        env:
+          BASE_HREF: ${{ steps.path.outputs.base_href }}
+        run: |
+          mkdir -p work/pages-root
+          if [[ "$BASE_HREF" == "/" ]]; then
+            serve_root="$GITHUB_WORKSPACE/build/web"
+          else
+            ln -s "$GITHUB_WORKSPACE/build/web" "work/pages-root${BASE_HREF%/}"
+            serve_root="work/pages-root"
+          fi
+          python -m http.server 8080 --directory "$serve_root" > work/server.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid"' EXIT
+          export MISSION_URL="http://127.0.0.1:8080${BASE_HREF}"
+          python tool/browser_web_smoke.py
+          python tool/browser_compat_faults.py
+      - name: Upload browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-qa-${{ github.run_id }}
+          path: work/browser-qa/
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Upload Pages build
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: build/web
+          retention-days: 7
+
+  deploy:
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Verify GitHub Pages configuration
+        uses: actions/configure-pages@v5
+      - name: Deploy the tested web artifact
+        id: deployment
+        uses: actions/deploy-pages@v4

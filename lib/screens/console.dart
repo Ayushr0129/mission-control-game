@@ -43,9 +43,33 @@ class _ControlState extends MissionController
                     child: Column(
                       children: [
                         topBar(wide),
+                        if (!saveOk)
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 20,
+                              vertical: 10,
+                            ),
+                            color: orange.withValues(alpha: .1),
+                            child: const Text(
+                              'Session only: progress stays in this tab. Reloading will lose it while device storage is unavailable.',
+                              style: TextStyle(
+                                color: orange,
+                                fontSize: 11,
+                                height: 1.5,
+                              ),
+                            ),
+                          ),
                         Expanded(
                           child: page == 'flight'
-                              ? flightView()
+                              ? FlightInput(
+                                  togglePause: toggleFlightPause,
+                                  pause: pauseFlight,
+                                  stage: separateStage,
+                                  throttle: adjustThrottle,
+                                  pitch: adjustPitch,
+                                  child: flightView(),
+                                )
                               : SingleChildScrollView(
                                   padding: EdgeInsets.fromLTRB(
                                     wide ? 40 : 20,
@@ -239,7 +263,7 @@ class _ControlState extends MissionController
         ),
         const SizedBox(width: 8),
         label(
-          saveOk ? (sandbox ? 'FREE PLAY' : 'LOCAL SAVE') : 'SAVE FAILED',
+          saveOk ? (sandbox ? 'FREE PLAY' : 'LOCAL SAVE') : 'SESSION ONLY',
           size: 8,
           color: saveOk ? dim : orange,
         ),

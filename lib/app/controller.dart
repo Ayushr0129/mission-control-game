@@ -36,10 +36,11 @@ abstract class MissionController extends State<MissionControl>
     audio.volume = p.volume;
     try {
       discoveries =
-          (jsonDecode(widget.store.prefs.getString('gallery') ?? '[]') as List)
+          (jsonDecode(widget.store.readString('gallery') ?? '[]') as List)
               .map((j) => Map<String, dynamic>.from(j))
               .toList();
     } catch (_) {}
+    saveOk = widget.store.persistent;
     saveTimer = Timer.periodic(const Duration(seconds: 2), (_) => save());
   }
 
@@ -237,6 +238,57 @@ abstract class MissionController extends State<MissionControl>
     game = MissionGame(flight!, tick);
     setState(() => page = 'flight');
     await save();
+  }
+
+  void setThrottle(double value) {
+    if (page != 'flight' || game == null) return;
+    setState(() {
+      if (landingActive) {
+        ops!.landingThrottle = value.clamp(0, 1);
+      } else {
+        flight!.throttle = value.clamp(0, 1);
+      }
+    });
+  }
+
+  void adjustThrottle(double delta) => setThrottle(
+    (landingActive ? ops!.landingThrottle : flight!.throttle) + delta,
+  );
+
+  void adjustPitch(double delta) {
+    if (page != 'flight' || landingActive) return;
+    setState(
+      () => flight!.guidance = (flight!.guidance + delta).clamp(-15, 15),
+    );
+  }
+
+  void separateStage() {
+    if (page != 'flight' || landingActive || !flight!.canSeparate) return;
+    flight!.separate();
+    setState(() {});
+    audio.play('click');
+    save();
+  }
+
+  void toggleFlightPause() {
+    if (page != 'flight' || game == null) return;
+    setState(() {
+      game!.simPaused = !game!.simPaused;
+      if (!landingActive) flight!.started = true;
+    });
+    if (game!.simPaused) {
+      audio.stop();
+      save();
+    } else {
+      // Called only by a click, tap, or key gesture: Safari may block autoplay.
+      audio.loop('engine');
+    }
+  }
+
+  void pauseFlight() {
+    if (page == 'flight' && game != null && !game!.simPaused) {
+      toggleFlightPause();
+    }
   }
 
   void tick() {

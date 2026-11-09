@@ -8,6 +8,10 @@ Four connected campaign missions: reach space, Earth orbit, lunar flyby, and rob
 
 A complete campaign includes funding, public trust, reputation, science, sequential mission unlocks, eight earned achievements, and automatic local saves. Free Play unlocks all four missions and bypasses campaign spending and progression. Historical intermissions are skippable. The NASA gallery is optional, has timeouts and offline field notes, and stores discovery metadata locally. Original procedural art and synthesized sound work offline; mute and volume controls are in Settings.
 
+## Play in Safari without installing developer tools
+
+The existing Flutter / Flame game now has a GitHub Pages workflow, Safari-oriented bootstrap, responsive desktop/mobile controls, and flight keyboard shortcuts. See [the GitHub Pages guide](docs/GITHUB_PAGES.md) for merging the dedicated branch, enabling Pages, the expected URL, bandwidth details and verification limits. A URL is live only after the deployment job succeeds; a pushed branch is not a successful deployment.
+
 ## Requirements and running
 
 - Flutter stable 3.47.9 / Dart 3.13.7 was used for verification. Minimum Dart constraint: 3.10.
@@ -47,7 +51,8 @@ Budget caps are per mission; programme funds are a separate constraint. A failur
 ## Architecture
 
 ```
-lib/main.dart                    bootstrap, imports and app definition
+lib/main.dart                    imports and app definition
+lib/app/bootstrap.dart           bounded startup, loading errors and retry
 lib/app/controller.dart          navigation, active session orchestration, persistence
 lib/screens/console.dart         responsive shell, overview, missions, briefings
 lib/screens/mission_screens.dart vehicle lab, flight controls, operations, debrief
@@ -57,8 +62,10 @@ lib/services/engineering.dart   mass, cost, power, rocket equation, readiness
 lib/services/flight.dart        deterministic launch integrator and snapshots
 lib/services/operations.dart    anomalies, mission steps, power and lunar descent
 lib/services/campaign.dart      spending, outcomes, progression and achievements
-lib/services/storage.dart       versioned local JSON / SharedPreferences
-lib/services/audio.dart         non-blocking sound playback
+lib/services/storage.dart       versioned local JSON, persistent/session fallback
+lib/services/audio.dart         platform audio export
+lib/services/audio_web.dart     gesture-activated Web Audio, original WAV assets
+lib/services/audio_native.dart  original native audioplayers playback
 lib/game/mission_game.dart      Flame animated flight rendering and time stepping
 lib/widgets/                   reusable controls and original procedural artwork
 assets/data/                   local mission and component JSON

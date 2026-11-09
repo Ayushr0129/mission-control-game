@@ -1,6 +1,9 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flame/game.dart';
+import 'package:mission_control/game/mission_game.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:mission_control/main.dart';
@@ -79,6 +82,60 @@ void main() {
       expect(find.text('Proof of possibility.'), findsOneWidget);
       await tap(t, 'Settings');
       expect(find.text('Your mission. Your pace.'), findsOneWidget);
+      expect(t.takeException(), isNull);
+      await t.pumpWidget(const SizedBox());
+      await t.pump();
+    },
+  );
+  testWidgets(
+    'Keyboard and pointer controls drive the same real flight state',
+    (t) async {
+      await mount(t, width: 1440);
+      await tap(t, 'Enter mission control');
+      await tap(t, 'Touch the edge');
+      await tap(t, 'Design spacecraft');
+      await tap(t, 'Proceed to launch');
+      final game =
+          (t.widget(find.byWidgetPredicate((w) => w is GameWidget))
+                      as GameWidget)
+                  .game
+              as MissionGame;
+      await t.sendKeyEvent(LogicalKeyboardKey.keyS);
+      await t.pump();
+      expect(game.flight.throttle, closeTo(.95, .001));
+      expect(
+        t.widget<Slider>(find.byKey(const ValueKey('flight-throttle'))).value,
+        closeTo(.95, .001),
+      );
+      await t.sendKeyEvent(LogicalKeyboardKey.keyW);
+      await t.pump();
+      expect(game.flight.throttle, 1);
+      await t.sendKeyEvent(LogicalKeyboardKey.keyA);
+      await t.pump();
+      expect(game.flight.guidance, 1);
+      await t.sendKeyEvent(LogicalKeyboardKey.keyD);
+      await t.pump();
+      expect(game.flight.guidance, 0);
+      await t.sendKeyEvent(LogicalKeyboardKey.keyG);
+      await t.pump();
+      expect(game.flight.separated, isFalse);
+      game.flight.time = 81;
+      await t.sendKeyEvent(LogicalKeyboardKey.keyG);
+      await t.pump();
+      expect(game.flight.separated, isTrue);
+      expect(find.text('Interstage separated'), findsOneWidget);
+      await t.sendKeyEvent(LogicalKeyboardKey.space);
+      await t.pump(const Duration(milliseconds: 50));
+      expect(game.flight.started, isTrue);
+      expect(game.simPaused, isFalse);
+      await t.sendKeyEvent(LogicalKeyboardKey.escape);
+      await t.pump();
+      expect(game.simPaused, isTrue);
+      // Keyboard actions do not remove or disable the original pointer slider.
+      final slider = find.byKey(const ValueKey('flight-throttle'));
+      await t.drag(slider, const Offset(-100, 0));
+      await t.pump();
+      expect(game.flight.throttle, lessThan(1));
       expect(t.takeException(), isNull);
       await t.pumpWidget(const SizedBox());
       await t.pump();
