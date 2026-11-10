@@ -37,6 +37,19 @@ To serve the prebuilt web edition, extract the web archive and run `python3 -m h
 
 ## Quick flight guide
 
+1. Choose a mission and press **Design spacecraft** for the physical rocket builder. Use **Load mission baseline** or assemble individual catalogue parts yourself.
+2. Review connections, fuel routing, stage order, payload, electricity and the displayed cost. **Launch assembled rocket** buys the actual vehicle once; there are no refunds after commitment.
+3. Ignite and use throttle and direct attitude controls. Stage depleted boosters. Inspect the live coast trajectory, apoapsis and periapsis in the map.
+4. Choose **1×, 2×, 5×, 10× or 25×**. Use **Auto-pause** for a timer, 100 km, stable orbit or the next apsis. Targets pause and reset to 1×; they do not steer. For orbital practice, load the orbital example and enable its optional flight tutor.
+5. At the mission's actual space/orbit gate, operate the retained spacecraft through story events, manoeuvres, science and downlink. Lunar terminal descent uses the actual remaining engines and fuel.
+6. Return and choose **Continue mission** to restore paused at 1× without another procurement charge.
+
+See [the detailed flight guide](docs/ROCKET_ASSEMBLY.md) for construction, the orbital procedure and simplified physics.
+
+## Preserved subsystem planner flight guide
+
+The earlier component-selector campaign remains available through **Subsystem design planner**. Its launcher, guidance and descent controls differ from the physical assembly mode:
+
 1. Enter mission control, choose an unlocked mission, and read or skip its historical briefing.
 2. In the Vehicle Lab, choose components. A selected part can be removed by tapping it again. Alternatives replace other parts in the same subsystem; science instruments can be combined.
 3. Use **Load a recommended baseline** if you want a known viable starting point. The default spacecraft is already suitable for Reach Space.
