@@ -47,16 +47,22 @@ class Controls:
         # Flutter retains semantics for clipped scroll children. On phones the
         # catalogue/control panel starts below the canvas; a DOM box above it
         # cannot receive a real finger gesture even when Playwright calls it visible.
-        floor=75
-        if self.touch and not overlay:
-            if p.get_by_text('ROCKET ASSEMBLY / FLIGHT LAB',exact=True).count():
-                floor=h*.58
-            for label in ['Rocket assembly grid','Vehicle tracking view','Flight trajectory map']:
-                canvas=p.get_by_role('img',name=label,exact=True)
-                bounds=canvas.bounding_box() if canvas.count() else None
-                if bounds:floor=max(floor,min(h*.6,bounds['y']+bounds['height']+8))
         for attempt in range(24):
             node=self.locate(name);box=node.bounding_box() if node.count() else None
+            # Let Flutter's canvas and its independently updated semantics mirror
+            # complete two real frames before using coordinates for physical input.
+            p.evaluate('()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))')
+            node=self.locate(name);fresh=node.bounding_box() if node.count() else None
+            floor=75
+            if self.touch and not overlay:
+                if p.get_by_text('ROCKET ASSEMBLY / FLIGHT LAB',exact=True).count():floor=h*.58
+                for label in ['Rocket assembly grid','Vehicle tracking view','Flight trajectory map']:
+                    canvas=p.get_by_role('img',name=label,exact=True)
+                    bounds=canvas.bounding_box() if canvas.count() else None
+                    if bounds:floor=max(floor,min(h*.6,bounds['y']+bounds['height']+8))
+            if box and fresh and max(abs(box[k]-fresh[k]) for k in ['x','y','width','height'])>.5:
+                continue
+            box=fresh
             if box and floor<box['y']+box['height']/2<h-65:return box
             delta=(box['y']+box['height']/2-h*(.8 if self.touch else .65)) if box else (-500 if attempt<8 else 500)
             self.scroll(delta)
