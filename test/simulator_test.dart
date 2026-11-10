@@ -191,6 +191,25 @@ void main() {
     await t.tap(find.text('Launch assembled rocket'));
     await t.pump();
     expect(find.text('Ignite & launch'), findsOneWidget);
+    for (final rate in ['2×', '5×', '10×', '25×']) {
+      await t.ensureVisible(find.text(rate));
+      await t.tap(find.text(rate));
+      await t.pump();
+    }
+    await t.ensureVisible(find.text('Auto-pause: Off'));
+    await t.tap(find.text('Auto-pause: Off'));
+    await t.pumpAndSettle();
+    await t.tap(find.text('In 1 minute'));
+    await t.pumpAndSettle();
+    expect(find.text('Auto-pause: In 1 minute'), findsOneWidget);
+    await t.tap(find.text('Auto-pause: In 1 minute'));
+    await t.pumpAndSettle();
+    await t.tap(find.text('No automatic pause'));
+    await t.pumpAndSettle();
+    await t.ensureVisible(find.text('1×'));
+    await t.tap(find.text('1×'));
+    await t.pump();
+
     await t.ensureVisible(find.text('Ignite & launch'));
     await t.tap(find.text('Ignite & launch'));
     await t.pump(const Duration(seconds: 2));

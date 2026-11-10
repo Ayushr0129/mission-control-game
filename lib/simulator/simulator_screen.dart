@@ -12,6 +12,7 @@ export 'simulator_art.dart' show AssemblyPainter, FlightPainter;
 import 'catalogue.dart';
 import 'campaign_session.dart';
 import 'orbit_tutor.dart';
+import 'time_warp.dart';
 import '../models/models.dart';
 
 class SimulatorScreen extends StatefulWidget {
@@ -38,7 +39,7 @@ class _SimulatorState extends State<SimulatorScreen>
   Assembly design = Assembly.starter();
   AssemblyCampaign? campaign;
   bool guideEnabled = false;
-  double timeScale = 1;
+  final timeWarp = FlightTimeWarp();
   final tutor = OrbitTutor();
   bool get campaignMode => widget.programme != null && widget.mission != null;
   Widget enginePanel() => ExpansionTile(
@@ -503,19 +504,39 @@ class _SimulatorState extends State<SimulatorScreen>
     if (!mounted) return;
     if (flight != null && !paused && !flight!.ended) {
       flight!.angle += turn * 30 * pi / 180 * dt;
-      if (guideEnabled && flight!.body.name == 'Earth') {
-        tutor.update(flight!);
+      final stopped = timeWarp.advance(
+        flight!,
+        dt,
+        (step) {
+          if (guideEnabled && flight!.body.name == 'Earth') {
+            tutor.update(flight!);
+          }
+          if (campaign == null) {
+            flight!.step(step);
+          } else {
+            campaign!.step(step);
+            flight = campaign!.flight;
+          }
+        },
+        canAdvance: () =>
+            campaign == null ||
+            (!campaign!.settled && campaign!.phase != 'operations'),
+      );
+      if (stopped != null) {
+        paused = true;
+        turn = 0;
+        message = stopped;
+        prediction = flight!.predict();
+        save();
       }
-      if (campaign == null) {
-        flight!.step(dt * timeScale);
-      } else {
-        campaign!.step(dt * timeScale);
-        flight = campaign!.flight;
-        if (campaign!.phase == 'operations' || campaign!.settled) {
-          paused = true;
-          guideEnabled = false;
-          save();
-        }
+      if (flight!.ended ||
+          campaign?.phase == 'operations' ||
+          (campaign?.settled ?? false)) {
+        paused = true;
+        guideEnabled = false;
+        timeWarp.cancel();
+        timeWarp.rate = 1;
+        save();
       }
       if (frames % 20 == 0) prediction = flight!.predict();
       setState(() {});
@@ -652,6 +673,8 @@ class _SimulatorState extends State<SimulatorScreen>
       if (!mounted) return;
     }
     setState(() {
+      timeWarp.cancel();
+      timeWarp.rate = 1;
       flight = campaign?.flight ?? SandboxFlight(design.copy());
       paused = true;
       map = false;
@@ -1301,15 +1324,49 @@ class _SimulatorState extends State<SimulatorScreen>
               setState(() => guideEnabled = v);
             },
           ),
-        Row(
+        const Text('Time rate', style: TextStyle(fontSize: 11)),
+        Wrap(
+          spacing: 4,
           children: [
-            const Text('Time rate', style: TextStyle(fontSize: 11)),
-            for (final rate in [1.0, 5.0, 10.0])
+            for (final rate in FlightTimeWarp.rates)
               TextButton(
-                onPressed: () => setState(() => timeScale = rate),
+                style: TextButton.styleFrom(
+                  backgroundColor: timeWarp.rate == rate
+                      ? cyan.withValues(alpha: .18)
+                      : null,
+                ),
+                onPressed: () => setState(() => timeWarp.rate = rate),
                 child: Text('${rate.round()}×'),
               ),
           ],
+        ),
+        PopupMenuButton<WarpStop>(
+          tooltip: 'Choose a flight milestone for automatic pause',
+          onSelected: (target) {
+            final error = timeWarp.arm(target, f);
+            setState(
+              () => message =
+                  error ??
+                  (target == WarpStop.none
+                      ? 'Automatic pause cancelled.'
+                      : 'Auto-pause armed: ${target.label}. Select a rate and resume flight.'),
+            );
+          },
+          itemBuilder: (_) => [
+            for (final target in WarpStop.values)
+              PopupMenuItem(value: target, child: Text(target.label)),
+          ],
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Text(
+              'Auto-pause: ${timeWarp.target == WarpStop.none ? "Off" : timeWarp.target.label}',
+              style: const TextStyle(color: cyan, fontSize: 12),
+            ),
+          ),
+        ),
+        const Text(
+          'Fast-forward advances burns, fuel and power. Pause targets do not steer. Reload restores paused at 1×.',
+          style: TextStyle(color: dim, fontSize: 10),
         ),
         Text(
           message,

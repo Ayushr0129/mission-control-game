@@ -30,7 +30,9 @@ Dry/wet mass, maximum active thrust, mass flow, pad thrust-to-weight, per-stage 
 - W/S or throttle slider: adjust thrust. G or **Separate stage**: execute the next stage. M: toggle trajectory map.
 - The camera renders the retained assembly around its mass-weighted centre, including multi-cell parts. Pan the map by dragging, use map zoom and **Centre trajectory map**. Vehicle camera zoom is separate.
 - The map shows the vehicle, a gravity-only coast prediction, AP/PE markers, and predicted Earth/Moon surface intersection. Negative periapsis intersects the body. A coast line excludes future thrust and atmospheric drag; it is not a powered-burn forecast. Burns change velocity, so the preview updates as the actual state evolves.
-- 1×/5×/10× changes simulation time, not the physical rules. Gravity/fuel integration retains bounded substeps.
+- Choose 1×, 2×, 5×, 10× or 25×. Fast-forward advances actual motion, burns, fuel and electricity; it does not steer or create an orbit. The optional tutor can fly the reference vehicle while time advances.
+- Open **Auto-pause** to choose 100 km altitude, stable orbit (bound with periapsis above 100 km), next apoapsis/periapsis, or one/five additional simulated minutes. Choose a speed, then ignite/resume. Targets also work if armed during a running flight. An apsis target requires a bound trajectory above 1 km; a powered burn can move or eliminate that apsis.
+- Targets are checked at most every 0.1 simulated seconds, while the normal gravity/fuel integrator retains 0.025-second substeps. Timer targets stop exactly. Arrival pauses and returns to 1×. Impact, landing and campaign operation gates interrupt warp. Reload always restores paused at 1× without an armed target.
 
 ## Verified orbital example and tutorial
 

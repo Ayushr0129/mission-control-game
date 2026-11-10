@@ -42,13 +42,13 @@ class Controls:
         node=p.get_by_label(name,exact=True)
         if node.count():return node.first
         return p.get_by_text(name,exact=True).first
-    def box(self,name):
+    def box(self,name,overlay=False):
         p=self.page;h=p.viewport_size['height']
         # Flutter retains semantics for clipped scroll children. On phones the
         # catalogue/control panel starts below the canvas; a DOM box above it
         # cannot receive a real finger gesture even when Playwright calls it visible.
         floor=75
-        if self.touch:
+        if self.touch and not overlay:
             for label in ['Rocket assembly grid','Vehicle tracking view','Flight trajectory map']:
                 canvas=p.get_by_role('img',name=label,exact=True)
                 bounds=canvas.bounding_box() if canvas.count() else None
@@ -59,8 +59,8 @@ class Controls:
             delta=(box['y']+box['height']/2-h*(.8 if self.touch else .65)) if box else (-500 if attempt<8 else 500)
             self.scroll(delta)
         raise AssertionError('Control not reachable: '+name)
-    def tap(self,name):
-        box=self.box(name);self.canvas();p=self.page;x=box['x']+box['width']/2;y=box['y']+box['height']/2
+    def tap(self,name,overlay=False):
+        box=self.box(name,overlay);self.canvas();p=self.page;x=box['x']+box['width']/2;y=box['y']+box['height']/2
         if self.touch:p.touchscreen.tap(x,y)
         else:p.mouse.click(x,y)
         p.wait_for_timeout(300)
@@ -105,7 +105,12 @@ def editor(browser,device,label):
         else:c.page.keyboard.down('KeyD');c.page.wait_for_timeout(500);c.page.keyboard.up('KeyD')
         c.wait(EDITOR,'p.flight&&p.flight.time>1&&p.flight.angle>0')
         assert len(c.read(EDITOR)['flight']['parts'])==3
-        c.tap('Pause simulation');c.tap('Trajectory map')
+        c.tap('Pause simulation');before=c.read(EDITOR)['flight']['time']
+        c.tap('25×');c.tap('Auto-pause: Off');c.tap('In 1 minute',overlay=True);c.tap('Resume simulation')
+        c.page.get_by_text('Auto-paused: In 1 minute. Rate reset to 1×.',exact=True).wait_for(timeout=30000)
+        c.wait(EDITOR,f'p.flight.time>={before+59.9}')
+        assert abs(c.read(EDITOR)['flight']['time']-before-60)<.15
+        c.tap('Trajectory map')
         c.page.screenshot(path=str(OUTPUT/(label+'-new-flight.png')))
         c.finish()
     except Exception:c.fail();raise
