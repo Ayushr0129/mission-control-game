@@ -49,6 +49,8 @@ class Controls:
         # cannot receive a real finger gesture even when Playwright calls it visible.
         floor=75
         if self.touch and not overlay:
+            if p.get_by_text('ROCKET ASSEMBLY / FLIGHT LAB',exact=True).count():
+                floor=h*.58
             for label in ['Rocket assembly grid','Vehicle tracking view','Flight trajectory map']:
                 canvas=p.get_by_role('img',name=label,exact=True)
                 bounds=canvas.bounding_box() if canvas.count() else None
@@ -94,7 +96,7 @@ class Controls:
 def editor(browser,device,label):
     c=Controls(browser,device,label+'-editor')
     try:
-        c.ready();c.tap('Build & fly a rocket');c.tap('New empty assembly');c.tap('Start empty')
+        c.ready();c.tap('Build & fly a rocket');c.tap('New empty assembly');c.tap('Start empty',overlay=True)
         for name,x,y in [('Command capsule',4,1),('Transfer tank',4,2),('Booster engine',4,3)]:c.drag(name,x,y)
         c.wait(EDITOR,'p.design.length===3')
         assert [p['kind'] for p in c.read(EDITOR)['design']]==['capsule','tank_small','engine']
