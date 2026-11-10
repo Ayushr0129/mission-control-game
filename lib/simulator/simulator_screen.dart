@@ -1368,6 +1368,13 @@ class _SimulatorState extends State<SimulatorScreen>
           'Fast-forward advances burns, fuel and power. Pause targets do not steer. Reload restores paused at 1×.',
           style: TextStyle(color: dim, fontSize: 10),
         ),
+        OutlinedButton.icon(
+          onPressed: ignition,
+          icon: Icon(paused ? Icons.play_arrow : Icons.pause),
+          label: Text(
+            paused ? 'Run at ${timeWarp.rate.round()}×' : 'Pause time warp',
+          ),
+        ),
         Text(
           message,
           style: const TextStyle(color: dim, fontSize: 10, height: 1.5),

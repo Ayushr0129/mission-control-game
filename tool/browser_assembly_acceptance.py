@@ -108,7 +108,7 @@ def editor(browser,device,label):
         c.wait(EDITOR,'p.flight&&p.flight.time>1&&p.flight.angle>0')
         assert len(c.read(EDITOR)['flight']['parts'])==3
         c.tap('Pause simulation');before=c.read(EDITOR)['flight']['time']
-        c.tap('25×');c.tap('Auto-pause: Off');c.tap('In 1 minute',overlay=True);c.tap('Resume simulation')
+        c.tap('25×');c.tap('Auto-pause: Off');c.tap('In 1 minute',overlay=True);c.tap('Run at 25×')
         c.page.get_by_text('Auto-paused: In 1 minute. Rate reset to 1×.',exact=True).wait_for(timeout=30000)
         c.wait(EDITOR,f'p.flight.time>={before+59.9}')
         assert abs(c.read(EDITOR)['flight']['time']-before-60)<.15
