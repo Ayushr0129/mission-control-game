@@ -53,7 +53,7 @@ def scenario(browser, device, label):
         else:
             c.tap('Pause simulation')
         c.page.get_by_text('Resume simulation', exact=True).wait_for()
-        hud = c.page.get_by_label(re.compile(r'^FLIGHT · PAUSED')).first
+        hud = c.page.get_by_text(re.compile(r'^FLIGHT · PAUSED')).first
         hud.wait_for(state='visible')
         text = hud.get_attribute('aria-label') or hud.inner_text()
         box = hud.bounding_box()
@@ -67,7 +67,7 @@ def scenario(browser, device, label):
         c.tap('Build & fly a rocket')
         c.page.get_by_text('Resume simulation', exact=True).wait_for()
         assert c.read(EDITOR)['flight']['surfaceMode'] is True
-        c.page.get_by_label(re.compile(r'^FLIGHT · PAUSED')).first.wait_for(state='visible')
+        c.page.get_by_text(re.compile(r'^FLIGHT · PAUSED')).first.wait_for(state='visible')
         c.finish()
     except Exception:
         c.fail()
