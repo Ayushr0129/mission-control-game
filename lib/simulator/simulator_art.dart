@@ -299,12 +299,75 @@ class FlightPainter extends CustomPainter {
     this.running, {
     this.pan = Offset.zero,
   });
+  void surfaceMap(Canvas c, Size s) {
+    final points = prediction.isEmpty ? [f.position] : prediction;
+    final left = points.fold<double>(
+      min(0, f.position.x),
+      (v, p) => min(v, p.x),
+    );
+    final right = points.fold<double>(
+      max(0, f.position.x),
+      (v, p) => max(v, p.x),
+    );
+    final height = points.fold<double>(
+      max(100, f.altitude),
+      (v, p) => max(v, p.y - f.body.radius),
+    );
+    final scale =
+        min(s.width * .8 / max(100, right - left), s.height * .65 / height) *
+        zoom;
+    final ground = s.height * .85 + pan.dy;
+    Offset screen(Point2 p) => Offset(
+      s.width / 2 + (p.x - (left + right) / 2) * scale + pan.dx,
+      ground - (p.y - f.body.radius) * scale,
+    );
+    c.drawRect(
+      Rect.fromLTRB(0, ground.clamp(0, s.height), s.width, s.height),
+      Paint()..color = const Color(0xff293832),
+    );
+    c.drawLine(
+      Offset(0, ground),
+      Offset(s.width, ground),
+      Paint()..color = dim,
+    );
+    final path = Path()
+      ..moveTo(screen(points.first).dx, screen(points.first).dy);
+    for (final p in points.skip(1)) {
+      final at = screen(p);
+      path.lineTo(at.dx, at.dy);
+    }
+    c.drawPath(
+      path,
+      Paint()
+        ..color = cyan
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.5,
+    );
+    c.drawCircle(screen(f.position), 5, Paint()..color = orange);
+    if (points.last.y <= f.body.radius) {
+      c.drawCircle(
+        screen(points.last),
+        4,
+        Paint()..color = const Color(0xffdc7777),
+      );
+    }
+    instrumentText(
+      c,
+      'FLAT GROUND / COAST PREDICTION · g = 9.8 m/s²',
+      const Offset(12, 15),
+      color: cyan,
+      size: 9,
+    );
+  }
+
   @override
   void paint(Canvas c, Size s) {
     c.save();
     c.clipRect(Offset.zero & s);
     c.drawRect(Offset.zero & s, Paint()..color = ink);
-    if (map) {
+    if (map && f.surfaceMode) {
+      surfaceMap(c, s);
+    } else if (map) {
       final extent = max(
         f.body.radius * 1.3,
         min(
@@ -435,15 +498,44 @@ class FlightPainter extends CustomPainter {
                   (m, p) => m + (p.y + p.height / 2) * (p.dryMass + p.fuel),
                 ) /
                 f.craft.mass;
-      if (altitude < 1000) {
-        final ground = min(s.height - 15, s.height * .65 + altitude * .15);
+      if (f.surfaceMode || altitude < 1000) {
+        var bottom = 0.0;
+        for (final p in parts) {
+          for (final x in [p.x.toDouble(), (p.x + p.width).toDouble()]) {
+            for (final y in [p.y.toDouble(), (p.y + p.height).toDouble()]) {
+              bottom = max(
+                bottom,
+                ((x - cx) * sin(f.angle) + (y - cy) * cos(f.angle)) * cell,
+              );
+            }
+          }
+        }
+        final ground = f.surfaceMode
+            ? s.height * .45 + bottom + altitude * cell / 2
+            : min(s.height - 15, s.height * .65 + altitude * .15);
         c.drawRect(
-          Rect.fromLTWH(0, ground, s.width, s.height),
+          Rect.fromLTRB(0, ground.clamp(0, s.height), s.width, s.height),
           Paint()
             ..color = (f.body.atmosphere
                 ? const Color(0xff293832)
                 : const Color(0xff555b61)),
         );
+        if (f.surfaceMode && ground < s.height) {
+          c.drawLine(
+            Offset(0, ground),
+            Offset(s.width, ground),
+            Paint()..color = dim,
+          );
+          final spacing = cell * 10;
+          final offset = (s.width / 2 - f.position.x * cell / 2) % spacing;
+          for (var x = offset - spacing; x < s.width; x += spacing) {
+            c.drawLine(
+              Offset(x, ground),
+              Offset(x, ground + 8),
+              Paint()..color = cyan,
+            );
+          }
+        }
       }
       c.save();
       c.translate(s.width / 2, s.height * .45);
@@ -480,6 +572,7 @@ class FlightPainter extends CustomPainter {
           flame:
               running &&
                   f.launched &&
+                  f.enginesOn &&
                   !f.ended &&
                   f.craft.engines.contains(p) &&
                   f.craft.tanksFor(p).isNotEmpty

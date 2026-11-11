@@ -381,26 +381,45 @@ class CelestialBody {
   static const moon = CelestialBody('Moon', moonRadius, 4.9048695e12, false);
 }
 
-/// Earth-centred inertial SI model. Spherical, nonrotating Earth; 2D point mass.
-/// Velocity Verlet gravity, exponential atmosphere, no lift or structural flex.
+/// SI point-mass flight: spherical orbital gravity or flat-ground training.
+/// Surface mode uses constant 9.8 m/s² gravity and no drag; orbital mode retains
+/// inverse-square gravity and an exponential atmosphere. No lift/structural flex.
 class SandboxFlight {
   static const radius = 6371000.0, mu = 3.986004418e14;
   final Assembly craft;
   final CelestialBody body;
+  final bool surfaceMode;
+  bool enginesOn = true;
+  static const surfaceGravity = 9.8;
   Point2 position = const Point2(0, radius + 20), velocity = const Point2(0, 0);
   double time = 0, angle = 0, throttle = 1, maxAltitude = 0;
   bool launched = false, ended = false;
   String status = 'Pad hold';
   double battery = 0, generationFactor = 1, loadFactor = 1;
-  SandboxFlight(this.craft, {this.body = CelestialBody.earth}) {
-    position = Point2(0, body.radius + 20);
+  SandboxFlight(
+    this.craft, {
+    this.body = CelestialBody.earth,
+    this.surfaceMode = false,
+  }) {
+    position = Point2(0, body.radius + (surfaceMode ? 0 : 20));
     battery = craft.batteryCapacity;
   }
-  double get altitude => position.length - body.radius;
-  double get verticalSpeed => velocity.dot(position) * (1 / position.length);
+  double get altitude =>
+      surfaceMode ? position.y - body.radius : position.length - body.radius;
+  double get verticalSpeed =>
+      surfaceMode ? velocity.y : velocity.dot(position) * (1 / position.length);
   double get pitch => ((angle * 180 / pi) % 360 + 360) % 360;
-  Point2 gravity(Point2 p) => p * (-body.mu / pow(p.length, 3));
+  double get currentThrust => !launched || ended || !enginesOn || throttle == 0
+      ? 0
+      : craft.activeEngines.fold(
+          0,
+          (sum, e) => sum + e.spec.thrust * max(throttle, e.spec.minThrottle),
+        );
+  Point2 gravity(Point2 p) => surfaceMode
+      ? const Point2(0, -surfaceGravity)
+      : p * (-body.mu / pow(p.length, 3));
   double get periapsis {
+    if (surfaceMode) return 0;
     final r = position.length, v = velocity.length;
     final energy = v * v / 2 - body.mu / r;
     final h = position.x * velocity.y - position.y * velocity.x;
@@ -411,6 +430,9 @@ class SandboxFlight {
   }
 
   double? get apoapsis {
+    if (surfaceMode) {
+      return altitude + pow(max(0, velocity.y), 2) / (2 * surfaceGravity);
+    }
     final energy = velocity.dot(velocity) / 2 - body.mu / position.length;
     if (energy >= 0) return null;
     return -body.mu / energy - (periapsis + body.radius) - body.radius;
@@ -423,7 +445,7 @@ class SandboxFlight {
     final h = dt / n;
     for (var i = 0; i < n && !ended; i++) {
       var force = const Point2(0, 0);
-      for (final engine in craft.engines) {
+      for (final engine in enginesOn ? craft.engines : <RocketPart>[]) {
         final tanks = craft.tanksFor(engine);
         final available = tanks.fold<double>(0, (s, t) => s + t.fuel);
         final requested =
@@ -448,7 +470,7 @@ class SandboxFlight {
                 thrust;
       }
       final speed = velocity.length;
-      final density = body.atmosphere
+      final density = body.atmosphere && !surfaceMode
           ? 1.225 * exp(-max(altitude, 0) / 8500)
           : 0.0;
       final width = craft.parts.isEmpty
@@ -487,7 +509,13 @@ class SandboxFlight {
         status = velocity.length <= 5
             ? 'Landed'
             : 'Impact — redesign or try a different flight path';
-        position = position * (body.radius / position.length);
+        position = surfaceMode
+            ? Point2(position.x, body.radius)
+            : position * (body.radius / position.length);
+      } else if (surfaceMode) {
+        status = altitude >= 100000
+            ? 'Space reached — flat-ground training'
+            : 'Surface flight';
       } else if (apoapsis == null && altitude > 100000) {
         status = 'Escape trajectory';
       } else if (apoapsis != null && periapsis > 100000) {
@@ -509,7 +537,17 @@ class SandboxFlight {
       v = v + (g + gravity(next)) * (.5 * dt);
       p = next;
       path.add(p);
-      if (p.length < body.radius) break;
+      if (surfaceMode ? p.y <= body.radius : p.length < body.radius) {
+        if (surfaceMode) {
+          final previous = path[path.length - 2];
+          final fraction = (previous.y - body.radius) / (previous.y - p.y);
+          path[path.length - 1] = Point2(
+            previous.x + (p.x - previous.x) * fraction,
+            body.radius,
+          );
+        }
+        break;
+      }
     }
     return path;
   }
@@ -522,6 +560,8 @@ class SandboxFlight {
     'generationFactor': generationFactor,
     'loadFactor': loadFactor,
     'body': body.name,
+    'surfaceMode': surfaceMode,
+    'enginesOn': enginesOn,
     'x': position.x,
     'y': position.y,
     'vx': velocity.x,
@@ -544,7 +584,9 @@ class SandboxFlight {
             (j['parts'] as List).any((p) => p['id'] == null),
       ),
       body: j['body'] == 'Moon' ? CelestialBody.moon : CelestialBody.earth,
+      surfaceMode: j['surfaceMode'] == true,
     );
+    f.enginesOn = j['enginesOn'] as bool? ?? true;
     f.position = Point2((j['x'] as num).toDouble(), (j['y'] as num).toDouble());
     f.velocity = Point2(
       (j['vx'] as num).toDouble(),

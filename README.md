@@ -39,7 +39,7 @@ To serve the prebuilt web edition, extract the web archive and run `python3 -m h
 
 1. Choose a mission and press **Design spacecraft** for the physical rocket builder. Use **Load mission baseline** or assemble individual catalogue parts yourself.
 2. Review connections, fuel routing, stage order, payload, electricity and the displayed cost. **Launch assembled rocket** buys the actual vehicle once; there are no refunds after commitment.
-3. Ignite and use throttle and direct attitude controls. Stage depleted boosters. Inspect the live coast trajectory, apoapsis and periapsis in the map.
+3. In fresh training, flat-ground flight uses constant 9.8 m/s² gravity. Space ignites/cuts engines, A/D rotate, and P pauses/resumes; touch buttons provide the same controls. The camera follows the rocket with a pinned altitude/speed/fuel HUD. Switch flat-ground mode off for orbital flight; campaigns and the orbital example keep orbital gravity. Use throttle and stage depleted boosters. Inspect the live coast trajectory, apoapsis and periapsis in the map.
 4. Choose **1×, 2×, 5×, 10× or 25×**. Use **Auto-pause** for a timer, 100 km, stable orbit or the next apsis. Targets pause and reset to 1×; they do not steer. For orbital practice, load the orbital example and enable its optional flight tutor.
 5. At the mission's actual space/orbit gate, operate the retained spacecraft through story events, manoeuvres, science and downlink. Lunar terminal descent uses the actual remaining engines and fuel.
 6. Return and choose **Continue mission** to restore paused at 1× without another procurement charge.

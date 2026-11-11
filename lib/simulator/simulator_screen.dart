@@ -38,7 +38,7 @@ class _SimulatorState extends State<SimulatorScreen>
   static const keyName = 'assembly_simulator_v1';
   Assembly design = Assembly.starter();
   AssemblyCampaign? campaign;
-  bool guideEnabled = false;
+  bool guideEnabled = false, surfaceTraining = true;
   final timeWarp = FlightTimeWarp();
   final tutor = OrbitTutor();
   bool get campaignMode => widget.programme != null && widget.mission != null;
@@ -461,6 +461,7 @@ class _SimulatorState extends State<SimulatorScreen>
       );
       if (raw != null) {
         final j = jsonDecode(raw);
+        surfaceTraining = j['surfaceTraining'] as bool? ?? false;
         design = Assembly(
           (j['design'] as List).map((p) => RocketPart.fromJson(p)).toList(),
           stageOrder: List<String>.from(j['stageOrder'] ?? []),
@@ -508,7 +509,9 @@ class _SimulatorState extends State<SimulatorScreen>
         flight!,
         dt,
         (step) {
-          if (guideEnabled && flight!.body.name == 'Earth') {
+          if (guideEnabled &&
+              !flight!.surfaceMode &&
+              flight!.body.name == 'Earth') {
             tutor.update(flight!);
           }
           if (campaign == null) {
@@ -560,6 +563,7 @@ class _SimulatorState extends State<SimulatorScreen>
           'flight': campaignMode ? null : flight?.toJson(),
           'stageOrder': design.stageOrder,
           'legacyFuelRouting': design.legacyFuelRouting,
+          'surfaceTraining': surfaceTraining,
         }),
       );
     } finally {
@@ -675,7 +679,9 @@ class _SimulatorState extends State<SimulatorScreen>
     setState(() {
       timeWarp.cancel();
       timeWarp.rate = 1;
-      flight = campaign?.flight ?? SandboxFlight(design.copy());
+      flight =
+          campaign?.flight ??
+          SandboxFlight(design.copy(), surfaceMode: surfaceTraining);
       paused = true;
       map = false;
       selected = null;
@@ -692,6 +698,23 @@ class _SimulatorState extends State<SimulatorScreen>
     f.launched = true;
     paused = !paused;
     turn = 0;
+    refresh();
+  }
+
+  void toggleEngines() {
+    final f = flight;
+    if (f == null || f.ended) return;
+    guideEnabled = false;
+    if (!f.launched) {
+      f.launched = true;
+      f.enginesOn = true;
+      paused = false;
+    } else {
+      f.enginesOn = !f.enginesOn;
+    }
+    message = f.enginesOn
+        ? 'Engines ON. Space cuts thrust; P pauses.'
+        : 'Engines OFF. Coasting under gravity; Space reignites.';
     refresh();
   }
 
@@ -756,6 +779,8 @@ class _SimulatorState extends State<SimulatorScreen>
       } else if (k == LogicalKeyboardKey.keyS) {
         flight!.throttle = (flight!.throttle - .05).clamp(0, 1);
       } else if (k == LogicalKeyboardKey.space && event is KeyDownEvent) {
+        toggleEngines();
+      } else if (k == LogicalKeyboardKey.keyP && event is KeyDownEvent) {
         ignition();
       } else if (k == LogicalKeyboardKey.keyG && event is KeyDownEvent) {
         stage();
@@ -1094,6 +1119,22 @@ class _SimulatorState extends State<SimulatorScreen>
         style: TextStyle(color: dim, fontSize: 10),
       ),
       const SizedBox(height: 8),
+      if (!campaignMode)
+        SwitchListTile(
+          title: const Text(
+            'Flat-ground flight · g = 9.8 m/s²',
+            style: TextStyle(fontSize: 12),
+          ),
+          subtitle: const Text(
+            'Constant gravity, no drag. Switch off for orbital flight.',
+            style: TextStyle(fontSize: 10),
+          ),
+          value: surfaceTraining,
+          onChanged: (v) {
+            setState(() => surfaceTraining = v);
+            save();
+          },
+        ),
       FilledButton.icon(
         onPressed: launch,
         icon: const Icon(Icons.rocket_launch),
@@ -1115,6 +1156,7 @@ class _SimulatorState extends State<SimulatorScreen>
           checkpoint();
           setState(() {
             design = Assembly.orbital();
+            surfaceTraining = false;
             selected = null;
             message =
                 'Orbital example: launch vertically, begin a gradual gravity turn, separate when booster fuel is exhausted. Use the orbital flight tutorial.';
@@ -1189,7 +1231,7 @@ class _SimulatorState extends State<SimulatorScreen>
           style: const TextStyle(color: cyan, fontSize: 12),
         ),
         Text(
-          'ALT ${(f.altitude / 1000).toStringAsFixed(1)} km · SPEED ${f.velocity.length.round()} m/s\nAP ${f.apoapsis == null ? "ESCAPE" : (f.apoapsis! / 1000).toStringAsFixed(1)} km · PE ${(f.periapsis / 1000).toStringAsFixed(1)} km · T+${f.time.round()} s',
+          'ALT ${(f.altitude / 1000).toStringAsFixed(1)} km · SPEED ${f.velocity.length.round()} m/s\n${f.surfaceMode ? 'Coast peak' : 'AP'} ${f.apoapsis == null ? "ESCAPE" : (f.apoapsis! / 1000).toStringAsFixed(1)} km${f.surfaceMode ? '' : ' · PE ${(f.periapsis / 1000).toStringAsFixed(1)} km'} · T+${f.time.round()} s',
           style: const TextStyle(
             fontFamily: 'JetBrainsMono',
             fontSize: 11,
@@ -1253,6 +1295,14 @@ class _SimulatorState extends State<SimulatorScreen>
           spacing: 8,
           runSpacing: 4,
           children: [
+            OutlinedButton(
+              onPressed: f.ended ? null : toggleEngines,
+              child: Text(
+                f.launched && f.enginesOn
+                    ? 'Cut engines · Space'
+                    : 'Ignite engines · Space',
+              ),
+            ),
             FilledButton(
               onPressed: f.ended ? null : ignition,
               child: Text(
@@ -1309,7 +1359,7 @@ class _SimulatorState extends State<SimulatorScreen>
             child: const Text('Centre trajectory map'),
           ),
         enginePanel(),
-        if (f.body.name == 'Earth')
+        if (f.body.name == 'Earth' && !f.surfaceMode)
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
             title: const Text('Orbital flight tutor'),
@@ -1382,6 +1432,45 @@ class _SimulatorState extends State<SimulatorScreen>
       ],
     );
   }
+
+  Widget flightCanvas(Widget canvas) => flight == null
+      ? canvas
+      : LayoutBuilder(
+          builder: (context, box) => Stack(
+            fit: StackFit.expand,
+            children: [
+              Positioned.fill(top: min(96, box.maxHeight * .35), child: canvas),
+              Positioned(
+                top: 8,
+                left: 12,
+                right: 12,
+                child: IgnorePointer(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: ink.withValues(alpha: .9),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(8),
+                      child: Text(
+                        'FLIGHT · ${paused ? "PAUSED" : "LIVE"} · ${flight!.enginesOn ? "ENGINES ON" : "ENGINES OFF"}\n'
+                        'Altitude ${flight!.altitude.toStringAsFixed(1)} m · Speed ${flight!.velocity.length.toStringAsFixed(1)} m/s\n'
+                        'Fuel ${flight!.craft.fuel.toStringAsFixed(0)} kg · Thrust ${(flight!.currentThrust / 1000).toStringAsFixed(1)} kN',
+                        key: const ValueKey('flight-hud'),
+                        style: const TextStyle(
+                          color: cyan,
+                          fontFamily: 'JetBrainsMono',
+                          fontSize: 11,
+                          height: 1.5,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
 
   @override
   Widget build(BuildContext context) => Focus(
@@ -1463,7 +1552,7 @@ class _SimulatorState extends State<SimulatorScreen>
                   if (wide) {
                     return Row(
                       children: [
-                        Expanded(child: canvas),
+                        Expanded(child: flightCanvas(canvas)),
                         SizedBox(
                           width: 380,
                           child: SingleChildScrollView(child: tools),
@@ -1473,7 +1562,7 @@ class _SimulatorState extends State<SimulatorScreen>
                   }
                   return Column(
                     children: [
-                      Expanded(child: canvas),
+                      Expanded(child: flightCanvas(canvas)),
                       ConstrainedBox(
                         constraints: BoxConstraints(
                           maxHeight: b.maxHeight * .48,
@@ -1488,7 +1577,7 @@ class _SimulatorState extends State<SimulatorScreen>
             const Padding(
               padding: EdgeInsets.all(6),
               child: Text(
-                'A/D hold turn · W/S throttle · Space launch/pause · G stage · M map. Coast prediction excludes thrust and drag.',
+                'Space engines ON/OFF · A/D turn · P pause · W/S throttle · G stage · M map. Coast prediction excludes thrust and drag.',
                 style: TextStyle(color: dim, fontSize: 10),
               ),
             ),
