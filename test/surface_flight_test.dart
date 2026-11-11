@@ -123,7 +123,7 @@ void main() {
                 .painter
             as FlightPainter;
     final f = painter.f;
-    expect(f.surfaceMode, true);
+    expect(f.surfaceMode, false);
     await t.sendKeyEvent(LogicalKeyboardKey.space);
     await t.pump();
     expect(f.launched, true);

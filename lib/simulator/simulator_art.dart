@@ -434,7 +434,8 @@ class FlightPainter extends CustomPainter {
         c.drawCircle(ap, 3, Paint()..color = cyan);
         instrumentText(c, 'AP', ap + const Offset(6, 0), size: 8);
       }
-      if (prediction.isNotEmpty && prediction.last.length < f.body.radius) {
+      if (prediction.isNotEmpty &&
+          prediction.last.length <= f.body.radius + .01) {
         final impact = screen(
           prediction.last * (f.body.radius / prediction.last.length),
         );
@@ -482,7 +483,94 @@ class FlightPainter extends CustomPainter {
             ],
           ).createShader(Offset.zero & s),
       );
-      final cell = min(s.width / 12, s.height / 16).clamp(12.0, 40.0) * zoom;
+      final baseCell = min(s.width / 12, s.height / 16).clamp(12.0, 40.0);
+      final metresScale = baseCell * zoom / 2;
+      final cell = f.surfaceMode
+          ? baseCell * zoom
+          : (baseCell * zoom).clamp(2.0, 120.0);
+      final bearing = f.surfaceMode ? 0.0 : atan2(f.position.x, f.position.y);
+      final viewAngle = f.angle - bearing;
+      final anchor = Offset(s.width / 2, s.height * .45);
+      if (!f.surfaceMode) {
+        final radius = f.body.radius * metresScale;
+        final center = anchor + Offset(0, f.position.length * metresScale);
+        final surface = Paint()
+          ..color = f.body.atmosphere
+              ? const Color(0xff293f45)
+              : const Color(0xff626970);
+        if (radius < 100000) {
+          if (f.body.atmosphere) {
+            c.drawCircle(
+              center,
+              (f.body.radius + SandboxFlight.atmosphereHeight) * metresScale,
+              Paint()..color = const Color(0x66446d8e),
+            );
+          }
+          c.drawCircle(center, radius, surface);
+          c.drawCircle(
+            center,
+            radius,
+            Paint()
+              ..color = dim
+              ..style = PaintingStyle.stroke
+              ..strokeWidth = 1,
+          );
+        } else {
+          // A stable local arc avoids float precision loss from a huge circle
+          // when only a few metres of the planet are visible.
+          final top = anchor.dy + altitude * metresScale;
+          final boundary = Path();
+          for (var x = -12.0; x <= s.width + 12; x += 12) {
+            final dx = x - anchor.dx;
+            final sag =
+                dx * dx / (radius + sqrt(max(0, radius * radius - dx * dx)));
+            if (x == -12) {
+              boundary.moveTo(x, top + sag);
+            } else {
+              boundary.lineTo(x, top + sag);
+            }
+          }
+          final fill = Path.from(boundary)
+            ..lineTo(s.width + 12, s.height + 12)
+            ..lineTo(-12, s.height + 12)
+            ..close();
+          c.drawPath(fill, surface);
+          c.drawPath(
+            boundary,
+            Paint()
+              ..color = dim
+              ..style = PaintingStyle.stroke
+              ..strokeWidth = 1,
+          );
+        }
+        Offset project(Point2 p) {
+          final relative = p - f.position;
+          return anchor +
+              Offset(
+                (relative.x * cos(bearing) - relative.y * sin(bearing)) *
+                    metresScale,
+                -(relative.x * sin(bearing) + relative.y * cos(bearing)) *
+                    metresScale,
+              );
+        }
+
+        final coast = Path();
+        for (var i = 0; i < prediction.length; i++) {
+          final at = project(prediction[i]);
+          if (i == 0) {
+            coast.moveTo(at.dx, at.dy);
+          } else {
+            coast.lineTo(at.dx, at.dy);
+          }
+        }
+        c.drawPath(
+          coast,
+          Paint()
+            ..color = cyan
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 1.5,
+        );
+      }
       final parts = f.craft.parts;
       final cx = parts.isEmpty
           ? 4.0
@@ -498,7 +586,7 @@ class FlightPainter extends CustomPainter {
                   (m, p) => m + (p.y + p.height / 2) * (p.dryMass + p.fuel),
                 ) /
                 f.craft.mass;
-      if (f.surfaceMode || altitude < 1000) {
+      if (f.surfaceMode) {
         var bottom = 0.0;
         for (final p in parts) {
           for (final x in [p.x.toDouble(), (p.x + p.width).toDouble()]) {
@@ -539,7 +627,7 @@ class FlightPainter extends CustomPainter {
       }
       c.save();
       c.translate(s.width / 2, s.height * .45);
-      c.rotate(f.angle);
+      c.rotate(viewAngle);
       for (final a in parts) {
         for (final b in f.craft.neighbors(a)) {
           c.drawLine(
@@ -584,13 +672,17 @@ class FlightPainter extends CustomPainter {
       c.restore();
       instrumentText(
         c,
-        'TRACKING / ACTUAL ASSEMBLY',
+        f.surfaceMode
+            ? 'TRACKING / ACTUAL ASSEMBLY'
+            : 'PLANET FLIGHT / FOLLOW CAMERA',
         const Offset(12, 15),
         color: cyan,
       );
       instrumentText(
         c,
-        'Use Trajectory map to inspect orbit and impact.',
+        zoom < .001 && !f.surfaceMode
+            ? 'Vehicle symbol enlarged · Coast prediction includes drag, excludes thrust.'
+            : 'Coast prediction includes drag, excludes future thrust.',
         Offset(12, s.height - 20),
         size: 8,
       );

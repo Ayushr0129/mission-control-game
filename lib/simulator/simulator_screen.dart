@@ -38,7 +38,7 @@ class _SimulatorState extends State<SimulatorScreen>
   static const keyName = 'assembly_simulator_v1';
   Assembly design = Assembly.starter();
   AssemblyCampaign? campaign;
-  bool guideEnabled = false, surfaceTraining = true;
+  bool guideEnabled = false;
   final timeWarp = FlightTimeWarp();
   final tutor = OrbitTutor();
   bool get campaignMode => widget.programme != null && widget.mission != null;
@@ -195,7 +195,7 @@ class _SimulatorState extends State<SimulatorScreen>
   bool panMode = false, draggingPart = false, editorFitted = false;
   String category = 'All';
   Offset mapPan = Offset.zero;
-  double cameraZoom = 1;
+  double cameraZoom = .5;
   RocketPart? dropPreview;
   String snapshot() => jsonEncode({
     'parts': design.parts.map((p) => p.toJson()).toList(),
@@ -461,7 +461,6 @@ class _SimulatorState extends State<SimulatorScreen>
       );
       if (raw != null) {
         final j = jsonDecode(raw);
-        surfaceTraining = j['surfaceTraining'] as bool? ?? false;
         design = Assembly(
           (j['design'] as List).map((p) => RocketPart.fromJson(p)).toList(),
           stageOrder: List<String>.from(j['stageOrder'] ?? []),
@@ -470,7 +469,7 @@ class _SimulatorState extends State<SimulatorScreen>
               (j['design'] as List).any((p) => p['id'] == null),
         );
         if (j['flight'] != null) {
-          flight = SandboxFlight.fromJson(j['flight']);
+          flight = SandboxFlight.fromJson(j['flight']).asPlanetFlight();
           prediction = flight!.predict();
         }
       }
@@ -563,7 +562,6 @@ class _SimulatorState extends State<SimulatorScreen>
           'flight': campaignMode ? null : flight?.toJson(),
           'stageOrder': design.stageOrder,
           'legacyFuelRouting': design.legacyFuelRouting,
-          'surfaceTraining': surfaceTraining,
         }),
       );
     } finally {
@@ -679,9 +677,7 @@ class _SimulatorState extends State<SimulatorScreen>
     setState(() {
       timeWarp.cancel();
       timeWarp.rate = 1;
-      flight =
-          campaign?.flight ??
-          SandboxFlight(design.copy(), surfaceMode: surfaceTraining);
+      flight = campaign?.flight ?? SandboxFlight(design.copy());
       paused = true;
       map = false;
       selected = null;
@@ -1119,22 +1115,10 @@ class _SimulatorState extends State<SimulatorScreen>
         style: TextStyle(color: dim, fontSize: 10),
       ),
       const SizedBox(height: 8),
-      if (!campaignMode)
-        SwitchListTile(
-          title: const Text(
-            'Flat-ground flight · g = 9.8 m/s²',
-            style: TextStyle(fontSize: 12),
-          ),
-          subtitle: const Text(
-            'Constant gravity, no drag. Switch off for orbital flight.',
-            style: TextStyle(fontSize: 10),
-          ),
-          value: surfaceTraining,
-          onChanged: (v) {
-            setState(() => surfaceTraining = v);
-            save();
-          },
-        ),
+      const Text(
+        'PLANET FLIGHT · Radial inverse-square gravity · Fading atmosphere',
+        style: TextStyle(color: cyan, fontSize: 11),
+      ),
       FilledButton.icon(
         onPressed: launch,
         icon: const Icon(Icons.rocket_launch),
@@ -1156,7 +1140,6 @@ class _SimulatorState extends State<SimulatorScreen>
           checkpoint();
           setState(() {
             design = Assembly.orbital();
-            surfaceTraining = false;
             selected = null;
             message =
                 'Orbital example: launch vertically, begin a gradual gravity turn, separate when booster fuel is exhausted. Use the orbital flight tutorial.';
@@ -1345,11 +1328,29 @@ class _SimulatorState extends State<SimulatorScreen>
               const Text('Camera zoom'),
               Expanded(
                 child: Slider(
-                  value: cameraZoom,
-                  min: .5,
-                  max: 3,
-                  onChanged: (v) => setState(() => cameraZoom = v),
+                  key: const ValueKey('planet-camera-zoom'),
+                  value: log(cameraZoom) / ln10,
+                  min: -7,
+                  max: log(3) / ln10,
+                  semanticFormatterCallback: (v) =>
+                      'Camera scale ${pow(10, v).toStringAsExponential(1)}',
+                  onChanged: (v) =>
+                      setState(() => cameraZoom = pow(10, v).toDouble()),
                 ),
+              ),
+            ],
+          ),
+        if (!map)
+          Wrap(
+            spacing: 8,
+            children: [
+              TextButton(
+                onPressed: () => setState(() => cameraZoom = 1e-6),
+                child: const Text('Planet scale'),
+              ),
+              TextButton(
+                onPressed: () => setState(() => cameraZoom = .5),
+                child: const Text('Follow rocket'),
               ),
             ],
           ),
@@ -1589,7 +1590,7 @@ class _SimulatorState extends State<SimulatorScreen>
             const Padding(
               padding: EdgeInsets.all(6),
               child: Text(
-                'Space engines ON/OFF · A/D turn · P pause · W/S throttle · G stage · M map. Coast prediction excludes thrust and drag.',
+                'Space engines ON/OFF · A/D turn · P pause · W/S throttle · G stage · M map. Coast prediction includes drag, excludes future thrust.',
                 style: TextStyle(color: dim, fontSize: 10),
               ),
             ),
