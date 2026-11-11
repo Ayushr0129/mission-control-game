@@ -23,6 +23,14 @@ class FlightTimeWarp {
   double deadline = 0;
 
   String? arm(WarpStop next, SandboxFlight flight) {
+    if (flight.surfaceMode &&
+        [
+          WarpStop.orbit,
+          WarpStop.apoapsis,
+          WarpStop.periapsis,
+        ].contains(next)) {
+      return 'Switch to orbital flight to use orbit and apsis pause targets.';
+    }
     if (next == WarpStop.space && flight.altitude >= 100000) {
       return 'Already above 100 km. Choose another pause target.';
     }

@@ -25,7 +25,9 @@ Dry/wet mass, maximum active thrust, mass flow, pad thrust-to-weight, per-stage 
 
 ## Fly and inspect the trajectory
 
-- Space: ignite/pause/resume; Esc: pause.
+- Space: ignite/cut engines. Cutoff stops propellant use while gravity and motion continue. The first Space press starts a held launch. P or the main simulation button pauses/resumes; Esc pauses. Touch/mouse **Ignite engines / Cut engines** performs the same engine toggle.
+- Fresh training designs default to **Flat-ground flight · g = 9.8 m/s²**: constant downward gravity, no drag, horizontal ground, and a camera fixed on the moving rocket. A pinned FLIGHT HUD shows altitude, speed, remaining fuel, wet mass and current thrust. Ground marks move with horizontal travel. The surface map predicts a ballistic coast to ground contact.
+- Switch the flat-ground option off for spherical orbital flight. **Load orbital example** selects orbital mode automatically, and campaign missions retain orbital/lunar gravity. Existing saves keep their original mode. Orbit/apsis pause targets and the orbital tutor require orbital mode.
 - Hold A/D: turn continuously. Touch/mouse one-degree buttons also support holding. The attitude slider provides individual degree settings clockwise from fixed inertial north. Near the launch site, zero points upward.
 - W/S or throttle slider: adjust thrust. G or **Separate stage**: execute the next stage. M: toggle trajectory map.
 - The camera renders the retained assembly around its mass-weighted centre, including multi-cell parts. Pan the map by dragging, use map zoom and **Centre trajectory map**. Vehicle camera zoom is separate.
