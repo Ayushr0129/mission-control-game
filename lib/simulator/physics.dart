@@ -418,6 +418,57 @@ class SandboxFlight {
   Point2 gravity(Point2 p) => surfaceMode
       ? const Point2(0, -surfaceGravity)
       : p * (-body.mu / pow(p.length, 3));
+  static const atmosphereHeight = 100000.0;
+  double airDensity(Point2 p) {
+    if (!body.atmosphere || surfaceMode) return 0;
+    final height = max(0.0, p.length - body.radius);
+    if (height >= atmosphereHeight) return 0;
+    final taper = ((atmosphereHeight - height) / 20000).clamp(0.0, 1.0);
+    return 1.225 * exp(-height / 8500) * taper;
+  }
+
+  Point2 dragAcceleration(Point2 p, Point2 velocity) {
+    final speed = velocity.length;
+    final density = airDensity(p);
+    final width = craft.parts.isEmpty
+        ? 1
+        : craft.parts.map((p) => p.x + p.width).reduce(max) -
+              craft.parts.map((p) => p.x).reduce(min);
+    final length = craft.parts.isEmpty
+        ? 1
+        : craft.parts.map((p) => p.y + p.height).reduce(max) -
+              craft.parts.map((p) => p.y).reduce(min);
+    final axial = speed == 0
+        ? 1.0
+        : (sin(angle) * velocity.x + cos(angle) * velocity.y).abs() / speed;
+    final sideways = speed == 0
+        ? 0.0
+        : (cos(angle) * velocity.x - sin(angle) * velocity.y).abs() / speed;
+    final area = 4 * (width * axial + length * sideways);
+    return velocity * (-.5 * density * .3 * area * speed / max(craft.mass, 1));
+  }
+
+  /// Upgrade a historical flat-ground snapshot without changing its hardware,
+  /// resources, altitude or local radial/tangential velocity.
+  SandboxFlight asPlanetFlight() {
+    if (!surfaceMode) return this;
+    final theta = position.x / body.radius;
+    final radial = Point2(sin(theta), cos(theta));
+    final tangent = Point2(cos(theta), -sin(theta));
+    final p = radial * (body.radius + max(0, altitude));
+    final v = radial * velocity.y + tangent * velocity.x;
+    return SandboxFlight.fromJson({
+      ...toJson(),
+      'surfaceMode': false,
+      'x': p.x,
+      'y': p.y,
+      'vx': v.x,
+      'vy': v.y,
+      'angle': angle + theta,
+      'status': ended ? status : 'Planet flight restored',
+    });
+  }
+
   double get periapsis {
     if (surfaceMode) return 0;
     final r = position.length, v = velocity.length;
@@ -469,28 +520,9 @@ class SandboxFlight {
                 ) *
                 thrust;
       }
-      final speed = velocity.length;
-      final density = body.atmosphere && !surfaceMode
-          ? 1.225 * exp(-max(altitude, 0) / 8500)
-          : 0.0;
-      final width = craft.parts.isEmpty
-          ? 1
-          : craft.parts.map((p) => p.x + p.width).reduce(max) -
-                craft.parts.map((p) => p.x).reduce(min);
-      final length = craft.parts.isEmpty
-          ? 1
-          : craft.parts.map((p) => p.y + p.height).reduce(max) -
-                craft.parts.map((p) => p.y).reduce(min);
-      final axial = speed == 0
-          ? 1.0
-          : (sin(angle) * velocity.x + cos(angle) * velocity.y).abs() / speed;
-      final sideways = speed == 0
-          ? 0.0
-          : (cos(angle) * velocity.x - sin(angle) * velocity.y).abs() / speed;
-      final area = 4 * (width * axial + length * sideways);
-      final drag =
-          velocity * (-.5 * density * .3 * area * speed / max(craft.mass, 1));
-      final acceleration = force * (1 / max(craft.mass, 1)) + drag;
+      final acceleration =
+          force * (1 / max(craft.mass, 1)) +
+          dragAcceleration(position, velocity);
       final g = gravity(position);
       final next = position + velocity * h + (g + acceleration) * (.5 * h * h);
       velocity = velocity + (g + gravity(next)) * (.5 * h) + acceleration * h;
@@ -528,16 +560,24 @@ class SandboxFlight {
     }
   }
 
+  /// Unpowered coast at current mass and held inertial attitude. Includes
+  /// atmospheric drag; small steps in air, larger Verlet steps in vacuum.
   List<Point2> predict({int count = 900, double dt = 8}) {
     var p = position, v = velocity;
     final path = <Point2>[p];
+    if (!dt.isFinite || dt <= 0) return path;
     for (var i = 0; i < count; i++) {
+      final drag = dragAcceleration(p, v);
+      var h = airDensity(p) > 0 ? min(dt, .25) : dt;
+      if (drag.length > 0) {
+        h = min(h, max(.00001, v.length / (5 * drag.length)));
+      }
       final g = gravity(p);
-      final next = p + v * dt + g * (.5 * dt * dt);
-      v = v + (g + gravity(next)) * (.5 * dt);
+      final next = p + v * h + (g + drag) * (.5 * h * h);
+      v = v + (g + gravity(next)) * (.5 * h) + drag * h;
       p = next;
       path.add(p);
-      if (surfaceMode ? p.y <= body.radius : p.length < body.radius) {
+      if (surfaceMode ? p.y <= body.radius : p.length <= body.radius) {
         if (surfaceMode) {
           final previous = path[path.length - 2];
           final fraction = (previous.y - body.radius) / (previous.y - p.y);
@@ -545,6 +585,8 @@ class SandboxFlight {
             previous.x + (p.x - previous.x) * fraction,
             body.radius,
           );
+        } else {
+          path[path.length - 1] = p * (body.radius / p.length);
         }
         break;
       }

@@ -104,10 +104,11 @@ void main() {
     t.view.devicePixelRatio = 1;
     addTearDown(t.view.resetPhysicalSize);
     addTearDown(t.view.resetDevicePixelRatio);
+    final store = SaveStore.session();
     await t.pumpWidget(
       MaterialApp(
         theme: ThemeData.dark(),
-        home: SimulatorScreen(store: SaveStore.session()),
+        home: SimulatorScreen(store: store),
       ),
     );
     await t.ensureVisible(find.text('Launch assembled rocket'));
@@ -123,7 +124,7 @@ void main() {
                 .painter
             as FlightPainter;
     final f = painter.f;
-    expect(f.surfaceMode, true);
+    expect(f.surfaceMode, false);
     await t.sendKeyEvent(LogicalKeyboardKey.space);
     await t.pump();
     expect(f.launched, true);
@@ -153,7 +154,12 @@ void main() {
     );
     await t.pump(const Duration(milliseconds: 80));
     await t.sendKeyUpEvent(LogicalKeyboardKey.keyD);
+    await t.pump();
     expect(f.angle, greaterThan(angle));
+    final saved =
+        jsonDecode(store.readString('assembly_simulator_v1')!)
+            as Map<String, dynamic>;
+    expect(saved['flight']['angle'], closeTo(f.angle, 1e-8));
     final right = f.angle;
     await t.sendKeyDownEvent(LogicalKeyboardKey.keyA);
     await t.runAsync(

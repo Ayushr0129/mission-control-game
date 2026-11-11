@@ -11,7 +11,7 @@ def scenario(browser, device, label):
         c.ready()
         c.tap('Build & fly a rocket')
         c.tap('Launch assembled rocket')
-        c.wait(EDITOR, 'p.flight && p.flight.surfaceMode===true')
+        c.wait(EDITOR, 'p.flight && p.flight.surfaceMode===false')
         initial = c.read(EDITOR)
         assert len(initial['flight']['parts']) == len(initial['design'])
         fuel = sum(p['fuel'] for p in initial['design'])
@@ -32,7 +32,9 @@ def scenario(browser, device, label):
         c.wait(EDITOR, f'p.flight.time>{coast["time"] + 1}')
         after = c.read(EDITOR)['flight']
         assert sum(p['fuel'] for p in after['parts']) == sum(p['fuel'] for p in coast['parts'])
-        assert math.isclose(after['vy'] - coast['vy'], -9.8 * (after['time'] - coast['time']), abs_tol=.001)
+        def energy(f):
+            return (f['vx']**2 + f['vy']**2)/2 - 3.986004418e14/math.hypot(f['x'], f['y'])
+        assert energy(after) <= energy(coast) + .01
         if c.touch:
             c.tap('Ignite engines · Space')
             c.tap('+1°')
@@ -60,13 +62,18 @@ def scenario(browser, device, label):
         assert box and box['y']>=0 and box['y']+box['height']<=c.page.viewport_size['height']
         assert 'Altitude ' in text and 'Fuel ' in text
         c.page.screenshot(path=str(OUTPUT / (label + '-hud.png')))
+        c.tap('Planet scale')
+        c.page.screenshot(path=str(OUTPUT / (label + '-planet.png')))
+        c.tap('Trajectory map')
+        c.page.get_by_role('img', name='Flight trajectory map', exact=True).wait_for()
+        c.page.screenshot(path=str(OUTPUT / (label + '-orbit-preview.png')))
         c.page.reload()
         c.page.locator('flt-semantics-placeholder').wait_for(state='attached', timeout=60000)
         c.page.locator('flt-semantics-placeholder').evaluate('(e)=>e.click()')
         c.page.get_by_text('Flight director console.', exact=True).wait_for(timeout=60000)
         c.tap('Build & fly a rocket')
         c.page.get_by_text('Resume simulation', exact=True).wait_for()
-        assert c.read(EDITOR)['flight']['surfaceMode'] is True
+        assert c.read(EDITOR)['flight']['surfaceMode'] is False
         c.page.get_by_text(re.compile(r'^FLIGHT · PAUSED')).first.wait_for(state='visible')
         c.finish()
     except Exception:
