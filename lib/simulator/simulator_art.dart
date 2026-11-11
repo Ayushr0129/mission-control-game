@@ -473,13 +473,15 @@ class FlightPainter extends CustomPainter {
             end: Alignment.bottomCenter,
             colors: [
               ink,
-              Color.lerp(
-                f.body.atmosphere
-                    ? const Color(0xff527e98)
-                    : const Color(0xff222428),
-                ink,
-                (altitude / 100000).clamp(0, 1),
-              )!,
+              zoom < .001 && !f.surfaceMode
+                  ? ink
+                  : Color.lerp(
+                      f.body.atmosphere
+                          ? const Color(0xff527e98)
+                          : const Color(0xff222428),
+                      ink,
+                      (altitude / 100000).clamp(0, 1),
+                    )!,
             ],
           ).createShader(Offset.zero & s),
       );

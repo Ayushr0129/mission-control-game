@@ -187,7 +187,7 @@ class _SimulatorState extends State<SimulatorScreen>
   List<Point2> prediction = [];
   late Timer timer;
   final clock = Stopwatch();
-  int last = 0, frames = 0;
+  int last = 0, lastPrediction = 0, lastSave = 0;
   final focus = FocusNode();
   final gridKey = GlobalKey();
   final editorTransform = TransformationController();
@@ -540,11 +540,16 @@ class _SimulatorState extends State<SimulatorScreen>
         timeWarp.rate = 1;
         save();
       }
-      if (frames % 20 == 0) prediction = flight!.predict();
+      if (now - lastPrediction >= 250000) {
+        prediction = flight!.predict();
+        lastPrediction = now;
+      }
       setState(() {});
     }
-    frames++;
-    if (frames % 120 == 0) save();
+    if (now - lastSave >= 2000000) {
+      save();
+      lastSave = now;
+    }
   }
 
   Future<void> save() async {
@@ -734,6 +739,7 @@ class _SimulatorState extends State<SimulatorScreen>
           LogicalKeyboardKey.keyD,
         ].contains(event.logicalKey)) {
       turn = 0;
+      refresh();
       return KeyEventResult.handled;
     }
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
