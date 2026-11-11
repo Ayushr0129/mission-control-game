@@ -1433,6 +1433,15 @@ class _SimulatorState extends State<SimulatorScreen>
     );
   }
 
+  String get flightHud =>
+      'FLIGHT · ${paused ? "PAUSED" : "LIVE"} · ${!flight!.launched
+          ? "ENGINES ARMED"
+          : flight!.enginesOn
+          ? "ENGINES ON"
+          : "ENGINES OFF"}\n'
+      'Altitude ${flight!.altitude.toStringAsFixed(1)} m · Speed ${flight!.velocity.length.toStringAsFixed(1)} m/s\n'
+      'Fuel ${flight!.craft.fuel.toStringAsFixed(0)} kg · Thrust ${(flight!.currentThrust / 1000).toStringAsFixed(1)} kN';
+
   Widget flightCanvas(Widget canvas) => flight == null
       ? canvas
       : LayoutBuilder(
@@ -1444,24 +1453,27 @@ class _SimulatorState extends State<SimulatorScreen>
                 top: 8,
                 left: 12,
                 right: 12,
-                child: IgnorePointer(
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      color: ink.withValues(alpha: .9),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.all(8),
-                      child: Text(
-                        'FLIGHT · ${paused ? "PAUSED" : "LIVE"} · ${flight!.enginesOn ? "ENGINES ON" : "ENGINES OFF"}\n'
-                        'Altitude ${flight!.altitude.toStringAsFixed(1)} m · Speed ${flight!.velocity.length.toStringAsFixed(1)} m/s\n'
-                        'Fuel ${flight!.craft.fuel.toStringAsFixed(0)} kg · Thrust ${(flight!.currentThrust / 1000).toStringAsFixed(1)} kN',
-                        key: const ValueKey('flight-hud'),
-                        style: const TextStyle(
-                          color: cyan,
-                          fontFamily: 'JetBrainsMono',
-                          fontSize: 11,
-                          height: 1.5,
+                child: Semantics(
+                  container: true,
+                  excludeSemantics: true,
+                  label: flightHud,
+                  child: IgnorePointer(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: ink.withValues(alpha: .9),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(8),
+                        child: Text(
+                          flightHud,
+                          key: const ValueKey('flight-hud'),
+                          style: const TextStyle(
+                            color: cyan,
+                            fontFamily: 'JetBrainsMono',
+                            fontSize: 11,
+                            height: 1.5,
+                          ),
                         ),
                       ),
                     ),

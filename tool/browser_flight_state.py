@@ -1,6 +1,7 @@
 """Release checks of actual assembled flight, keyboard/touch engine cutoff and HUD."""
 import math
 import os
+import re
 from browser_assembly_acceptance import Controls, EDITOR, OUTPUT, sync_playwright
 
 
@@ -52,8 +53,12 @@ def scenario(browser, device, label):
         else:
             c.tap('Pause simulation')
         c.page.get_by_text('Resume simulation', exact=True).wait_for()
-        text = c.page.locator('body').inner_text()
-        assert 'FLIGHT · PAUSED' in text and 'Altitude ' in text and 'Fuel ' in text
+        hud = c.page.get_by_label(re.compile(r'^FLIGHT · PAUSED')).first
+        hud.wait_for(state='visible')
+        text = hud.get_attribute('aria-label') or hud.inner_text()
+        box = hud.bounding_box()
+        assert box and box['y']>=0 and box['y']+box['height']<=c.page.viewport_size['height']
+        assert 'Altitude ' in text and 'Fuel ' in text
         c.page.screenshot(path=str(OUTPUT / (label + '-hud.png')))
         c.page.reload()
         c.page.locator('flt-semantics-placeholder').wait_for(state='attached', timeout=60000)
@@ -62,7 +67,7 @@ def scenario(browser, device, label):
         c.tap('Build & fly a rocket')
         c.page.get_by_text('Resume simulation', exact=True).wait_for()
         assert c.read(EDITOR)['flight']['surfaceMode'] is True
-        assert 'FLIGHT · PAUSED' in c.page.locator('body').inner_text()
+        c.page.get_by_label(re.compile(r'^FLIGHT · PAUSED')).first.wait_for(state='visible')
         c.finish()
     except Exception:
         c.fail()

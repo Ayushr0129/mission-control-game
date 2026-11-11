@@ -99,6 +99,7 @@ void main() {
   testWidgets('FLIGHT HUD stays visible and Space toggles engines, P pauses', (
     t,
   ) async {
+    final semantics = t.ensureSemantics();
     t.view.physicalSize = const Size(390, 844);
     t.view.devicePixelRatio = 1;
     addTearDown(t.view.resetPhysicalSize);
@@ -135,6 +136,10 @@ void main() {
       t.widget<Text>(find.byKey(const ValueKey('flight-hud'))).data,
       contains('LIVE · ENGINES OFF'),
     );
+    expect(
+      find.bySemanticsLabel(RegExp('FLIGHT · LIVE · ENGINES OFF')),
+      findsOneWidget,
+    );
     final fuel = f.craft.fuel;
     f.step(.5);
     expect(f.craft.fuel, fuel);
@@ -169,5 +174,6 @@ void main() {
     expect(hud.bottom, lessThan(844));
     expect(t.takeException(), isNull);
     await t.pumpWidget(const SizedBox());
+    semantics.dispose();
   });
 }
