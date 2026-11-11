@@ -7,11 +7,28 @@ import '../services/storage.dart';
 import '../widgets/art.dart';
 import '../widgets/ui.dart';
 import 'physics.dart';
+import 'simulator_art.dart';
+export 'simulator_art.dart' show AssemblyPainter, FlightPainter;
+import 'catalogue.dart';
+import 'campaign_session.dart';
+import 'orbit_tutor.dart';
+import 'time_warp.dart';
+import '../models/models.dart';
 
 class SimulatorScreen extends StatefulWidget {
   final SaveStore store;
   final VoidCallback? onInteraction;
-  const SimulatorScreen({super.key, required this.store, this.onInteraction});
+  final Programme? programme;
+  final Mission? mission;
+  final int? missionIndex;
+  const SimulatorScreen({
+    super.key,
+    required this.store,
+    this.onInteraction,
+    this.programme,
+    this.mission,
+    this.missionIndex,
+  });
   @override
   State<SimulatorScreen> createState() => _SimulatorState();
 }
@@ -20,6 +37,145 @@ class _SimulatorState extends State<SimulatorScreen>
     with WidgetsBindingObserver {
   static const keyName = 'assembly_simulator_v1';
   Assembly design = Assembly.starter();
+  AssemblyCampaign? campaign;
+  bool guideEnabled = false;
+  final timeWarp = FlightTimeWarp();
+  final tutor = OrbitTutor();
+  bool get campaignMode => widget.programme != null && widget.mission != null;
+  Widget enginePanel() => ExpansionTile(
+    title: const Text(
+      'Engine ignition / shutdown',
+      style: TextStyle(fontSize: 12),
+    ),
+    children: [
+      for (final p in flight!.craft.parts.where((p) => p.spec.thrust > 0))
+        SwitchListTile(
+          title: Text(
+            '${p.spec.name} (${p.x},${p.y})',
+            style: const TextStyle(fontSize: 11),
+          ),
+          subtitle: Text(
+            flight!.craft.exhaustClear(p) ? 'Exhaust clear' : 'Exhaust blocked',
+            style: const TextStyle(fontSize: 10),
+          ),
+          value: p.enabled,
+          onChanged: (v) {
+            guideEnabled = false;
+            setState(() => p.enabled = v);
+            campaign?.refreshReserve();
+            refresh();
+          },
+        ),
+    ],
+  );
+  Widget missionPanel() {
+    final session = campaign;
+    if (session == null) return const SizedBox();
+    if (session.settled) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            session.success ? 'MISSION ACCOMPLISHED' : 'MISSION DEBRIEF',
+            style: const TextStyle(color: cyan, fontSize: 18),
+          ),
+          Text(session.report, style: const TextStyle(height: 1.6)),
+          Text(
+            'Actual launch cost \$${session.launchCost.toStringAsFixed(1)}M · Science returned ${session.success ? session.operations?.observations ?? 0 : 0}\nFuel retained ${(session.flight.craft.fuel / 1000).toStringAsFixed(2)} t · Battery ${session.flight.battery.round()} Wh\nProgramme funds \$${widget.programme!.funding.toStringAsFixed(1)}M',
+            style: const TextStyle(color: dim, height: 1.8),
+          ),
+          const Text(
+            'Compare engine efficiency, payload mass, electrical load and recorder size before your next attempt. Launch costs are spent once; no refunds after launch.',
+            style: TextStyle(color: dim, fontSize: 12),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Return to mission control'),
+          ),
+        ],
+      );
+    }
+    final o = session.operations;
+    if (session.phase != 'operations' || o == null) return const SizedBox();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          widget.mission!.name,
+          style: const TextStyle(color: cyan, fontSize: 18),
+        ),
+        Text(
+          widget.mission!.history,
+          style: const TextStyle(fontSize: 12, height: 1.6),
+        ),
+        const Divider(),
+        Text(session.report, style: const TextStyle(fontSize: 12, height: 1.6)),
+        Text(
+          'STEP ${o.phase + 1}: ${o.phaseName}',
+          style: const TextStyle(color: cyan),
+        ),
+        Text(
+          'Actual payload: ${flight!.craft.science} science · ${flight!.craft.range == 2 ? 'lunar' : 'Earth'} link\nBattery ${o.battery.toStringAsFixed(1)} Wh · Manoeuvre reserve ${o.deltaV.round()} m/s\nRecorder ${session.data.toStringAsFixed(1)} / ${flight!.craft.dataCapacity.round()} MB · Link ${flight!.craft.downlink} MB/s',
+          style: const TextStyle(
+            fontFamily: 'JetBrainsMono',
+            fontSize: 11,
+            height: 1.8,
+          ),
+        ),
+        enginePanel(),
+        if (flight!.craft.separators.isNotEmpty)
+          OutlinedButton(
+            onPressed: stage,
+            child: const Text('Separate stage / expose reserve'),
+          ),
+        if (!o.eventResolved) ...[
+          Text(o.eventText, style: const TextStyle(fontSize: 13, height: 1.6)),
+          for (var i = 0; i < o.eventOptions.length; i++)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: OutlinedButton(
+                onPressed: () {
+                  session.resolveEvent(i);
+                  refresh();
+                },
+                child: Text(o.eventOptions[i]),
+              ),
+            ),
+        ],
+        if (o.eventResolved)
+          FilledButton(
+            onPressed: () {
+              session.advance();
+              flight = session.flight;
+              paused = true;
+              guideEnabled = false;
+              refresh();
+            },
+            child: Text(
+              [
+                'Execute mission manoeuvre',
+                widget.mission!.id == 'landing' && !o.landed
+                    ? 'Begin lunar descent'
+                    : 'Confirm destination approach',
+                'Collect payload observations',
+                'Downlink & complete mission',
+              ][o.phase.clamp(0, 3)],
+            ),
+          ),
+        TextButton(
+          onPressed: () {
+            session.settle(
+              false,
+              'Mission abandoned by flight director; launch expenditure remains spent.',
+            );
+            refresh();
+          },
+          child: const Text('Abandon assembled mission'),
+        ),
+      ],
+    );
+  }
+
   SandboxFlight? flight;
   RocketPart? selected;
   String
@@ -33,16 +189,284 @@ class _SimulatorState extends State<SimulatorScreen>
   final clock = Stopwatch();
   int last = 0, frames = 0;
   final focus = FocusNode();
+  final gridKey = GlobalKey();
+  final editorTransform = TransformationController();
+  final undoStack = <String>[], redoStack = <String>[];
+  bool panMode = false, draggingPart = false, editorFitted = false;
+  String category = 'All';
+  Offset mapPan = Offset.zero;
+  double cameraZoom = 1;
+  RocketPart? dropPreview;
+  String snapshot() => jsonEncode({
+    'parts': design.parts.map((p) => p.toJson()).toList(),
+    'order': design.stageOrder,
+    'legacyFuelRouting': design.legacyFuelRouting,
+  });
+  void checkpoint() {
+    undoStack.add(snapshot());
+    if (undoStack.length > 100) undoStack.removeAt(0);
+    redoStack.clear();
+  }
+
+  void restoreDesign(String raw) {
+    final j = jsonDecode(raw);
+    design = Assembly(
+      (j['parts'] as List).map((p) => RocketPart.fromJson(p)).toList(),
+      stageOrder: List<String>.from(j['order']),
+      legacyFuelRouting: j['legacyFuelRouting'] ?? false,
+    );
+    selected = null;
+    save();
+  }
+
+  void undo() {
+    if (undoStack.isEmpty) return;
+    setState(() {
+      redoStack.add(snapshot());
+      restoreDesign(undoStack.removeLast());
+    });
+  }
+
+  void redo() {
+    if (redoStack.isEmpty) return;
+    setState(() {
+      undoStack.add(snapshot());
+      restoreDesign(redoStack.removeLast());
+    });
+  }
+
+  bool fits(RocketPart p) =>
+      p.x >= 0 &&
+      p.y >= 0 &&
+      p.x + p.width <= 9 &&
+      p.y + p.height <= 12 &&
+      !design.parts.any((b) => b != p && p.overlaps(b));
+  void duplicate() {
+    final p = selected;
+    if (p == null) return;
+    for (var y = 0; y < 12; y++) {
+      for (var x = 0; x < 9; x++) {
+        final copy = RocketPart(
+          p.kind,
+          x,
+          y,
+          rotation: p.rotation,
+          fuel: p.fuel,
+          crossfeed: p.crossfeed,
+        );
+        if (fits(copy)) {
+          checkpoint();
+          setState(() {
+            design.parts.add(copy);
+            selected = copy;
+          });
+          save();
+          return;
+        }
+      }
+    }
+    setState(() => message = 'No free space for this part.');
+  }
+
+  void rotate() {
+    final p = selected;
+    if (p == null) return;
+    final old = p.rotation;
+    p.rotation = (p.rotation + 1) % 4;
+    if (!fits(p)) {
+      p.rotation = old;
+      setState(() => message = 'Rotation would overlap or leave the grid.');
+      return;
+    }
+    p.rotation = old;
+    checkpoint();
+    setState(() => p.rotation = (old + 1) % 4);
+    save();
+  }
+
+  void remove() {
+    if (selected == null) return;
+    checkpoint();
+    setState(() {
+      design.parts.remove(selected);
+      selected = null;
+    });
+    save();
+  }
+
+  void reorderStage(int from, int to) {
+    final ids = design.separators.map((p) => p.id).toList();
+    if (to < 0 || to >= ids.length) return;
+    checkpoint();
+    final id = ids.removeAt(from);
+    ids.insert(to, id);
+    setState(() {
+      design.stageOrder
+        ..clear()
+        ..addAll(ids);
+    });
+    save();
+  }
+
+  Widget catalogueItem(PartSpec spec) {
+    final chip = ChoiceChip(
+      label: Text(spec.name, style: const TextStyle(fontSize: 11)),
+      selected: tool == spec.id,
+      onSelected: (_) => setState(() => tool = spec.id),
+    );
+    final feedback = Material(
+      color: panel,
+      child: Padding(
+        padding: const EdgeInsets.all(10),
+        child: Text(
+          spec.name,
+          style: const TextStyle(color: cyan, fontSize: 14),
+        ),
+      ),
+    );
+    return Tooltip(
+      message: '${spec.purpose}\n${spec.summary}',
+      child: MediaQuery.sizeOf(context).width > 900
+          ? Draggable<String>(
+              data: spec.id,
+              dragAnchorStrategy: pointerDragAnchorStrategy,
+              feedback: feedback,
+              child: chip,
+            )
+          : LongPressDraggable<String>(
+              data: spec.id,
+              dragAnchorStrategy: pointerDragAnchorStrategy,
+              feedback: feedback,
+              child: chip,
+            ),
+    );
+  }
+
+  Widget constructionCanvas(BoxConstraints box) {
+    const cell = 48.0, width = 432.0, height = 576.0;
+    if (!editorFitted) {
+      final fit = min(box.maxWidth / width, box.maxHeight / height);
+      editorTransform.value = Matrix4.diagonal3Values(fit, fit, 1)
+        ..setTranslationRaw(
+          (box.maxWidth - width * fit) / 2,
+          (box.maxHeight - height * fit) / 2,
+          0,
+        );
+      editorFitted = true;
+    }
+    return InteractiveViewer(
+      transformationController: editorTransform,
+      constrained: false,
+      panEnabled: panMode,
+      scaleEnabled: true,
+      minScale: .25,
+      maxScale: 3,
+      boundaryMargin: const EdgeInsets.all(600),
+      child: SizedBox(
+        width: width,
+        height: height,
+        child: DragTarget<String>(
+          onWillAcceptWithDetails: (_) => true,
+          onMove: (details) {
+            final render =
+                gridKey.currentContext!.findRenderObject() as RenderBox;
+            final point = render.globalToLocal(details.offset);
+            setState(
+              () => dropPreview = RocketPart(
+                details.data,
+                (point.dx / cell).floor(),
+                (point.dy / cell).floor(),
+              ),
+            );
+          },
+          onLeave: (_) => setState(() => dropPreview = null),
+          onAcceptWithDetails: (details) {
+            final render =
+                gridKey.currentContext!.findRenderObject() as RenderBox;
+            final point = render.globalToLocal(details.offset);
+            tool = details.data;
+            place(
+              (point.dx / cell).floor(),
+              (point.dy / cell).floor(),
+              selectExisting: false,
+            );
+            setState(() => dropPreview = null);
+          },
+          builder: (c, accepted, rejected) => GestureDetector(
+            key: const ValueKey('assembly-grid'),
+            onTapUp: panMode
+                ? null
+                : (d) => place(
+                    (d.localPosition.dx / cell).floor(),
+                    (d.localPosition.dy / cell).floor(),
+                  ),
+            onPanStart: panMode
+                ? null
+                : (d) {
+                    selected = design.at(
+                      (d.localPosition.dx / cell).floor(),
+                      (d.localPosition.dy / cell).floor(),
+                    );
+                    if (selected != null) {
+                      checkpoint();
+                      draggingPart = true;
+                    }
+                    setState(() {});
+                  },
+            onPanUpdate: panMode
+                ? null
+                : (d) {
+                    final p = selected;
+                    if (p != null) {
+                      move(
+                        (d.localPosition.dx / cell).floor() - p.x,
+                        (d.localPosition.dy / cell).floor() - p.y,
+                      );
+                    }
+                  },
+            onPanEnd: panMode
+                ? null
+                : (_) {
+                    draggingPart = false;
+                    save();
+                  },
+            onPanCancel: panMode ? null : () => draggingPart = false,
+            child: Semantics(
+              container: true,
+              image: true,
+              label: 'Rocket assembly grid',
+              child: CustomPaint(
+                key: gridKey,
+                painter: AssemblyPainter(
+                  design,
+                  selected,
+                  preview: dropPreview,
+                ),
+                child: const SizedBox.expand(),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     try {
-      final raw = widget.store.readString(keyName);
+      final raw = widget.store.readString(
+        campaignMode ? 'campaign_assembly_editor_v1' : keyName,
+      );
       if (raw != null) {
         final j = jsonDecode(raw);
         design = Assembly(
           (j['design'] as List).map((p) => RocketPart.fromJson(p)).toList(),
+          stageOrder: List<String>.from(j['stageOrder'] ?? []),
+          legacyFuelRouting:
+              j['legacyFuelRouting'] ??
+              (j['design'] as List).any((p) => p['id'] == null),
         );
         if (j['flight'] != null) {
           flight = SandboxFlight.fromJson(j['flight']);
@@ -52,6 +476,22 @@ class _SimulatorState extends State<SimulatorScreen>
     } catch (_) {
       message =
           'Saved simulator data could not be read. Starter restored; campaign saves are separate.';
+    }
+    if (campaignMode) {
+      final active = widget.programme!.active;
+      if (active?['stage'] == 'assembly' &&
+          active?['mission'] == widget.missionIndex) {
+        campaign = AssemblyCampaign.restore(
+          widget.programme!,
+          widget.mission!,
+          widget.missionIndex!,
+          Map<String, dynamic>.from(active!['snapshot']),
+        );
+        flight = campaign!.flight;
+        prediction = flight!.predict();
+      } else {
+        flight = null;
+      }
     }
     clock.start();
     timer = Timer.periodic(const Duration(milliseconds: 16), (_) => tick());
@@ -64,7 +504,40 @@ class _SimulatorState extends State<SimulatorScreen>
     if (!mounted) return;
     if (flight != null && !paused && !flight!.ended) {
       flight!.angle += turn * 30 * pi / 180 * dt;
-      flight!.step(dt);
+      final stopped = timeWarp.advance(
+        flight!,
+        dt,
+        (step) {
+          if (guideEnabled && flight!.body.name == 'Earth') {
+            tutor.update(flight!);
+          }
+          if (campaign == null) {
+            flight!.step(step);
+          } else {
+            campaign!.step(step);
+            flight = campaign!.flight;
+          }
+        },
+        canAdvance: () =>
+            campaign == null ||
+            (!campaign!.settled && campaign!.phase != 'operations'),
+      );
+      if (stopped != null) {
+        paused = true;
+        turn = 0;
+        message = stopped;
+        prediction = flight!.predict();
+        save();
+      }
+      if (flight!.ended ||
+          campaign?.phase == 'operations' ||
+          (campaign?.settled ?? false)) {
+        paused = true;
+        guideEnabled = false;
+        timeWarp.cancel();
+        timeWarp.rate = 1;
+        save();
+      }
       if (frames % 20 == 0) prediction = flight!.predict();
       setState(() {});
     }
@@ -76,11 +549,17 @@ class _SimulatorState extends State<SimulatorScreen>
     if (saving) return;
     saving = true;
     try {
+      if (campaignMode) {
+        campaign?.persist();
+        await widget.store.save(widget.programme!);
+      }
       await widget.store.writeString(
-        keyName,
+        campaignMode ? 'campaign_assembly_editor_v1' : keyName,
         jsonEncode({
           'design': design.parts.map((p) => p.toJson()).toList(),
-          'flight': flight?.toJson(),
+          'flight': campaignMode ? null : flight?.toJson(),
+          'stageOrder': design.stageOrder,
+          'legacyFuelRouting': design.legacyFuelRouting,
         }),
       );
     } finally {
@@ -102,6 +581,7 @@ class _SimulatorState extends State<SimulatorScreen>
     timer.cancel();
     clock.stop();
     WidgetsBinding.instance.removeObserver(this);
+    editorTransform.dispose();
     focus.dispose();
     super.dispose();
   }
@@ -118,13 +598,17 @@ class _SimulatorState extends State<SimulatorScreen>
     final p = selected;
     if (p == null) return;
     final x = p.x + dx, y = p.y + dy;
-    if (x < 0 ||
-        x > 8 ||
-        y < 0 ||
-        y > 11 ||
-        design.parts.any((b) => b != p && b.x == x && b.y == y)) {
+    final oldX = p.x, oldY = p.y;
+    p.x = x;
+    p.y = y;
+    final valid = fits(p);
+    p.x = oldX;
+    p.y = oldY;
+    if (!valid) {
+      setState(() => message = 'Move blocked: overlap or grid boundary.');
       return;
     }
+    if (!draggingPart) checkpoint();
     setState(() {
       p.x = x;
       p.y = y;
@@ -132,28 +616,66 @@ class _SimulatorState extends State<SimulatorScreen>
     save();
   }
 
-  void place(int x, int y) {
+  void place(int x, int y, {bool selectExisting = true}) {
     widget.onInteraction?.call();
-    if (x < 0 || x > 8 || y < 0 || y > 11) return;
+    final at = design.at(x, y);
+    if (at != null && selectExisting) {
+      setState(() => selected = at);
+      return;
+    }
+    final part = RocketPart(tool, x, y);
+    if (!fits(part)) {
+      setState(() => message = 'Placement blocked: overlap or grid boundary.');
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
+      return;
+    }
+    checkpoint();
     setState(() {
-      final at = design.parts.where((p) => p.x == x && p.y == y).firstOrNull;
-      if (at != null) {
-        selected = at;
-      } else {
-        selected = RocketPart(tool, x, y);
-        design.parts.add(selected!);
-      }
+      selected = part;
+      design.parts.add(part);
     });
     save();
   }
 
-  void launch() {
-    if (design.problems.isNotEmpty) {
-      setState(() => message = design.problems.join(' '));
+  Future<void> launch() async {
+    final issues = campaignMode
+        ? AssemblyCampaign.requirements(
+            design,
+            widget.mission!,
+            widget.programme!,
+          )
+        : design.problems;
+    if (issues.isNotEmpty) {
+      setState(() => message = issues.join(' '));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
       return;
     }
+    if (flight != null) return;
+    if (campaignMode) {
+      try {
+        campaign = AssemblyCampaign.launch(
+          widget.programme!,
+          widget.mission!,
+          widget.missionIndex!,
+          design,
+        );
+      } catch (e) {
+        setState(() => message = e.toString());
+        return;
+      }
+    }
+    if (campaignMode) {
+      await widget.store.save(widget.programme!);
+      if (!mounted) return;
+    }
     setState(() {
-      flight = SandboxFlight(design.copy());
+      timeWarp.cancel();
+      timeWarp.rate = 1;
+      flight = campaign?.flight ?? SandboxFlight(design.copy());
       paused = true;
       map = false;
       selected = null;
@@ -178,6 +700,8 @@ class _SimulatorState extends State<SimulatorScreen>
     if (f == null || f.ended) return;
     final old = f.craft.mass;
     final changed = f.craft.separate();
+    f.battery = f.battery.clamp(0, f.craft.batteryCapacity);
+    campaign?.refreshReserve();
     message = changed
         ? 'Stage separated: ${(old - f.craft.mass).round()} kg released. Upper engines receive fuel only from their own stage.'
         : 'No separator remains.';
@@ -198,6 +722,30 @@ class _SimulatorState extends State<SimulatorScreen>
     }
     widget.onInteraction?.call();
     final k = event.logicalKey;
+    if (flight != null &&
+        [
+          LogicalKeyboardKey.keyA,
+          LogicalKeyboardKey.keyD,
+          LogicalKeyboardKey.keyW,
+          LogicalKeyboardKey.keyS,
+        ].contains(k)) {
+      guideEnabled = false;
+    }
+    if (flight == null &&
+        (HardwareKeyboard.instance.isControlPressed ||
+            HardwareKeyboard.instance.isMetaPressed) &&
+        k == LogicalKeyboardKey.keyZ) {
+      if (HardwareKeyboard.instance.isShiftPressed) {
+        redo();
+      } else {
+        undo();
+      }
+      return KeyEventResult.handled;
+    }
+    if (flight == null && k == LogicalKeyboardKey.delete) {
+      remove();
+      return KeyEventResult.handled;
+    }
     if (flight != null) {
       if (k == LogicalKeyboardKey.keyA) {
         turn = -1;
@@ -261,7 +809,17 @@ class _SimulatorState extends State<SimulatorScreen>
       ),
     );
     if (confirmed == true && mounted) {
-      setState(() => flight = null);
+      if (campaign != null && !campaign!.settled) {
+        campaign!.settle(
+          false,
+          'Returned to assembly; launch costs remain spent.',
+        );
+      }
+      setState(() {
+        flight = null;
+        campaign = null;
+        guideEnabled = false;
+      });
       save();
     }
   }
@@ -269,38 +827,181 @@ class _SimulatorState extends State<SimulatorScreen>
   Widget builderTools() => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
-      label('PART CATALOGUE', color: cyan),
-      const SizedBox(height: 8),
-      Wrap(
-        spacing: 6,
-        runSpacing: 4,
+      if (campaignMode) ...[
+        Text(
+          'CAMPAIGN / ${widget.mission!.name}',
+          style: const TextStyle(color: cyan, fontSize: 17),
+        ),
+        Text(
+          widget.mission!.objective,
+          style: const TextStyle(fontSize: 12, height: 1.6),
+        ),
+        Text(
+          'Budget \$${widget.mission!.budget}M · Programme \$${widget.programme!.funding.toStringAsFixed(1)}M\nProcurement \$${design.cost.toStringAsFixed(1)}M + \$1M pad fee = \$${(design.cost + 1).toStringAsFixed(1)}M\nRemaining cap \$${(widget.mission!.budget - design.cost - 1).toStringAsFixed(1)}M · Science ≥${widget.mission!.science} · ${widget.mission!.range == 2 ? 'Lunar' : 'Earth'} link',
+          style: const TextStyle(fontSize: 12, height: 1.6),
+        ),
+        const Text(
+          'Editing is free. Launch charges the displayed total once; no refunds after launch.',
+          style: TextStyle(color: dim, fontSize: 11),
+        ),
+        TextButton(
+          onPressed: () {
+            checkpoint();
+            setState(() {
+              design = Assembly.missionBaseline(widget.missionIndex!);
+              selected = null;
+            });
+            save();
+          },
+          child: const Text('Load mission baseline'),
+        ),
+      ],
+      if (design.legacyFuelRouting)
+        const Text(
+          'Legacy fuel routing preserved for this saved design. Load a new baseline to use explicit crossfeed rules.',
+          style: TextStyle(fontSize: 10, color: orange),
+        ),
+      Row(
         children: [
-          for (final kind in [
-            'capsule',
-            'tank',
-            'engine',
-            'separator',
-            'science',
-          ])
-            ChoiceChip(
-              label: Text(kind),
-              selected: tool == kind,
-              onSelected: (_) => setState(() => tool = kind),
+          IconButton(
+            tooltip: 'Zoom in',
+            onPressed: () => setState(
+              () => editorTransform.value = Matrix4.diagonal3Values(
+                (editorTransform.value.getMaxScaleOnAxis() * 1.25).clamp(
+                  .25,
+                  3,
+                ),
+                (editorTransform.value.getMaxScaleOnAxis() * 1.25).clamp(
+                  .25,
+                  3,
+                ),
+                1,
+              ),
             ),
+            icon: const Icon(Icons.zoom_in),
+          ),
+          IconButton(
+            tooltip: 'Zoom out',
+            onPressed: () => setState(
+              () => editorTransform.value = Matrix4.diagonal3Values(
+                (editorTransform.value.getMaxScaleOnAxis() / 1.25).clamp(
+                  .25,
+                  3,
+                ),
+                (editorTransform.value.getMaxScaleOnAxis() / 1.25).clamp(
+                  .25,
+                  3,
+                ),
+                1,
+              ),
+            ),
+            icon: const Icon(Icons.zoom_out),
+          ),
+          const Text('Workspace zoom', style: TextStyle(fontSize: 11)),
+        ],
+      ),
+      label('PART CATALOGUE', color: cyan),
+      const Text(
+        'Drag a part onto the grid (touch: hold first), or select it then tap a cell.',
+        style: TextStyle(color: dim, fontSize: 11),
+      ),
+      SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            for (final c in [
+              'All',
+              ...PartSpec.all.map((s) => s.category).toSet(),
+            ])
+              Padding(
+                padding: const EdgeInsets.only(right: 4),
+                child: ChoiceChip(
+                  label: Text(c),
+                  selected: category == c,
+                  onSelected: (_) => setState(() => category = c),
+                ),
+              ),
+          ],
+        ),
+      ),
+      Wrap(
+        spacing: 5,
+        runSpacing: 2,
+        children: [
+          for (final spec in PartSpec.all.where(
+            (s) => category == 'All' || s.category == category,
+          ))
+            catalogueItem(spec),
         ],
       ),
       const SizedBox(height: 8),
       Text(
-        '${design.parts.length} parts · ${(design.mass / 1000).toStringAsFixed(1)} t · \$${design.cost.toStringAsFixed(1)}M\nPad TWR ${(design.thrust / max(design.mass * 9.80665, 1)).toStringAsFixed(2)}',
+        (selected?.spec ?? PartSpec.get(tool)).purpose,
+        style: const TextStyle(fontSize: 12, color: cyan),
+      ),
+      Text(
+        (selected?.spec ?? PartSpec.get(tool)).summary,
+        style: const TextStyle(fontSize: 11, height: 1.6),
+      ),
+      const Text(
+        'Edge attachment ports · grid snapping · dry/filled mass differ',
+        style: TextStyle(fontSize: 10, color: dim),
+      ),
+      Wrap(
+        children: [
+          IconButton(
+            tooltip: 'Undo',
+            onPressed: undoStack.isEmpty ? null : undo,
+            icon: const Icon(Icons.undo),
+          ),
+          IconButton(
+            tooltip: 'Redo',
+            onPressed: redoStack.isEmpty ? null : redo,
+            icon: const Icon(Icons.redo),
+          ),
+          TextButton(
+            onPressed: () => setState(() => panMode = !panMode),
+            child: Text(panMode ? 'Edit parts' : 'Pan workspace'),
+          ),
+        ],
+      ),
+      Row(
+        children: [
+          const Text('Workspace zoom', style: TextStyle(fontSize: 11)),
+          Expanded(
+            child: Slider(
+              value: editorTransform.value.getMaxScaleOnAxis().clamp(.25, 3),
+              min: .25,
+              max: 3,
+              onChanged: (v) {
+                setState(
+                  () =>
+                      editorTransform.value = Matrix4.diagonal3Values(v, v, 1),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+      TextButton(
+        onPressed: () => setState(() => editorFitted = false),
+        child: const Text('Fit assembly'),
+      ),
+      Text(
+        '${design.parts.length} parts · Dry ${(design.dryMass / 1000).toStringAsFixed(1)} t · Fuel ${(design.fuel / 1000).toStringAsFixed(1)} t · Wet ${(design.mass / 1000).toStringAsFixed(1)} t\nDesign \$${design.cost.toStringAsFixed(1)}M · Thrust ${(design.totalThrust / 1000).round()} kN · Flow ${design.flow.toStringAsFixed(1)} kg/s · TWR ${(design.thrust / max(design.mass * 9.80665, 1)).toStringAsFixed(2)}\nPower ${design.generation.round()} W / ${design.consumption.round()} W · Battery ${design.batteryCapacity.round()} Wh\nScience ${design.science} · Storage ${design.dataCapacity.round()} MB · Link ${design.range == 2
+            ? 'lunar'
+            : design.range == 1
+            ? 'Earth'
+            : 'none'}',
         style: const TextStyle(
           fontFamily: 'JetBrainsMono',
-          fontSize: 12,
-          height: 1.6,
+          fontSize: 11,
+          height: 1.7,
         ),
       ),
       if (selected != null) ...[
         Text(
-          'Selected: ${selected!.kind} (${selected!.x}, ${selected!.y})',
+          'Selected: ${selected!.spec.name} (${selected!.x}, ${selected!.y})',
           style: const TextStyle(color: cyan, fontSize: 12),
         ),
         Wrap(
@@ -327,28 +1028,71 @@ class _SimulatorState extends State<SimulatorScreen>
             ),
             IconButton(
               tooltip: 'Rotate part',
-              onPressed: () {
-                setState(
-                  () => selected!.rotation = (selected!.rotation + 1) % 4,
-                );
-                save();
-              },
+              onPressed: rotate,
               icon: const Icon(Icons.rotate_right),
             ),
             IconButton(
+              tooltip: 'Duplicate part',
+              onPressed: duplicate,
+              icon: const Icon(Icons.copy),
+            ),
+            IconButton(
               tooltip: 'Remove part',
-              onPressed: () {
-                setState(() {
-                  design.parts.remove(selected);
-                  selected = null;
-                });
-                save();
-              },
+              onPressed: remove,
               icon: const Icon(Icons.delete_outline),
             ),
           ],
         ),
+        if (selected!.kind == 'separator')
+          SwitchListTile(
+            title: const Text('Allow fuel crossfeed'),
+            value: selected!.crossfeed,
+            onChanged: (v) {
+              checkpoint();
+              setState(() => selected!.crossfeed = v);
+              save();
+            },
+          ),
+        if (selected!.spec.thrust > 0)
+          Text(
+            design.exhaustClear(selected!)
+                ? 'Exhaust clear'
+                : 'Exhaust blocked — stowed until its stage is exposed',
+            style: const TextStyle(color: orange, fontSize: 11),
+          ),
       ],
+      const SizedBox(height: 8),
+      label('STAGE ORDER / ALIGNED VACUUM ESTIMATES'),
+      for (var i = 0; i < design.separators.length; i++)
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                'Stage ${i + 1}: decoupler (${design.separators[i].x},${design.separators[i].y})',
+                style: const TextStyle(fontSize: 11),
+              ),
+            ),
+            IconButton(
+              tooltip: 'Move stage ${i + 1} earlier',
+              onPressed: () => reorderStage(i, i - 1),
+              icon: const Icon(Icons.arrow_upward),
+            ),
+            IconButton(
+              tooltip: 'Move stage ${i + 1} later',
+              onPressed: () => reorderStage(i, i + 1),
+              icon: const Icon(Icons.arrow_downward),
+            ),
+          ],
+        ),
+      for (final s in design.stages)
+        Text(
+          '${(s.mass / 1000).toStringAsFixed(1)} t · ${(s.thrust / 1000).round()} kN · ${(s.fuel / 1000).toStringAsFixed(1)} t fuel · Δv ${s.deltaV.round()} m/s',
+          style: const TextStyle(fontSize: 11, color: dim),
+        ),
+      const Text(
+        'Vacuum rocket equation; assumes aligned thrust and complete stage burn. Gravity/drag reduce achieved velocity.',
+        style: TextStyle(color: dim, fontSize: 10),
+      ),
       const SizedBox(height: 8),
       FilledButton.icon(
         onPressed: launch,
@@ -357,6 +1101,7 @@ class _SimulatorState extends State<SimulatorScreen>
       ),
       TextButton(
         onPressed: () {
+          checkpoint();
           setState(() {
             design = Assembly.starter();
             selected = null;
@@ -366,14 +1111,25 @@ class _SimulatorState extends State<SimulatorScreen>
         child: const Text('Load two-stage training rocket'),
       ),
       TextButton(
+        onPressed: () {
+          checkpoint();
+          setState(() {
+            design = Assembly.orbital();
+            selected = null;
+            message =
+                'Orbital example: launch vertically, begin a gradual gravity turn, separate when booster fuel is exhausted. Use the orbital flight tutorial.';
+          });
+          save();
+        },
+        child: const Text('Load orbital example'),
+      ),
+      TextButton(
         onPressed: () async {
           final confirmed = await showDialog<bool>(
             context: context,
             builder: (c) => AlertDialog(
               title: const Text('Start an empty assembly?'),
-              content: const Text(
-                'The current design will be replaced. You can reload the training rocket anytime.',
-              ),
+              content: const Text('Replace this design? Undo can restore it.'),
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(c, false),
@@ -387,11 +1143,10 @@ class _SimulatorState extends State<SimulatorScreen>
             ),
           );
           if (confirmed == true && mounted) {
+            checkpoint();
             setState(() {
               design = Assembly([]);
               selected = null;
-              message =
-                  'Choose a part, then tap a grid cell. Start with one command capsule.';
             });
             save();
           }
@@ -404,6 +1159,7 @@ class _SimulatorState extends State<SimulatorScreen>
       ),
     ],
   );
+
   Widget hold(String title, double direction) => Listener(
     onPointerDown: (_) {
       focus.requestFocus();
@@ -421,6 +1177,10 @@ class _SimulatorState extends State<SimulatorScreen>
   );
   Widget controls() {
     final f = flight!;
+    if (campaign != null &&
+        (campaign!.phase == 'operations' || campaign!.settled)) {
+      return missionPanel();
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -436,6 +1196,14 @@ class _SimulatorState extends State<SimulatorScreen>
             height: 1.6,
           ),
         ),
+        Text(
+          'Vertical ${f.verticalSpeed.toStringAsFixed(0)} m/s · Horizontal ${sqrt(max(0, f.velocity.dot(f.velocity) - f.verticalSpeed * f.verticalSpeed)).toStringAsFixed(0)} m/s',
+          style: const TextStyle(color: cyan, fontSize: 11),
+        ),
+        Text(
+          'Mass ${(f.craft.mass / 1000).toStringAsFixed(2)} t · Available thrust ${(f.craft.totalThrust / 1000).round()} kN · Stage Δv ${f.craft.stageDeltaV.round()} m/s\nBattery ${f.battery.toStringAsFixed(1)} / ${f.craft.batteryCapacity.round()} Wh · Power ${f.craft.generation.round()} / ${f.craft.consumption.round()} W',
+          style: const TextStyle(color: dim, fontSize: 10, height: 1.6),
+        ),
         Row(
           children: [
             const Text('Throttle'),
@@ -444,6 +1212,7 @@ class _SimulatorState extends State<SimulatorScreen>
                 key: const ValueKey('sim-throttle'),
                 value: f.throttle,
                 onChanged: (v) {
+                  guideEnabled = false;
                   f.throttle = v;
                   refresh();
                 },
@@ -465,6 +1234,7 @@ class _SimulatorState extends State<SimulatorScreen>
                 max: 360,
                 divisions: 360,
                 onChanged: (v) {
+                  guideEnabled = false;
                   f.angle = v * pi / 180;
                   refresh();
                 },
@@ -519,6 +1289,92 @@ class _SimulatorState extends State<SimulatorScreen>
               ),
             ],
           ),
+        if (!map)
+          Row(
+            children: [
+              const Text('Camera zoom'),
+              Expanded(
+                child: Slider(
+                  value: cameraZoom,
+                  min: .5,
+                  max: 3,
+                  onChanged: (v) => setState(() => cameraZoom = v),
+                ),
+              ),
+            ],
+          ),
+        if (map)
+          TextButton(
+            onPressed: () => setState(() => mapPan = Offset.zero),
+            child: const Text('Centre trajectory map'),
+          ),
+        enginePanel(),
+        if (f.body.name == 'Earth')
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Orbital flight tutor'),
+            subtitle: Text(
+              guideEnabled
+                  ? tutor.instruction
+                  : 'Optional feedback pilot. Manual steering or throttle disables it.',
+              style: const TextStyle(fontSize: 10),
+            ),
+            value: guideEnabled,
+            onChanged: (v) {
+              setState(() => guideEnabled = v);
+            },
+          ),
+        const Text('Time rate', style: TextStyle(fontSize: 11)),
+        Wrap(
+          spacing: 4,
+          children: [
+            for (final rate in FlightTimeWarp.rates)
+              TextButton(
+                style: TextButton.styleFrom(
+                  backgroundColor: timeWarp.rate == rate
+                      ? cyan.withValues(alpha: .18)
+                      : null,
+                ),
+                onPressed: () => setState(() => timeWarp.rate = rate),
+                child: Text('${rate.round()}×'),
+              ),
+          ],
+        ),
+        PopupMenuButton<WarpStop>(
+          tooltip: 'Choose a flight milestone for automatic pause',
+          onSelected: (target) {
+            final error = timeWarp.arm(target, f);
+            setState(
+              () => message =
+                  error ??
+                  (target == WarpStop.none
+                      ? 'Automatic pause cancelled.'
+                      : 'Auto-pause armed: ${target.label}. Select a rate and resume flight.'),
+            );
+          },
+          itemBuilder: (_) => [
+            for (final target in WarpStop.values)
+              PopupMenuItem(value: target, child: Text(target.label)),
+          ],
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Text(
+              'Auto-pause: ${timeWarp.target == WarpStop.none ? "Off" : timeWarp.target.label}',
+              style: const TextStyle(color: cyan, fontSize: 12),
+            ),
+          ),
+        ),
+        const Text(
+          'Fast-forward advances burns, fuel and power. Pause targets do not steer. Reload restores paused at 1×.',
+          style: TextStyle(color: dim, fontSize: 10),
+        ),
+        OutlinedButton.icon(
+          onPressed: ignition,
+          icon: Icon(paused ? Icons.play_arrow : Icons.pause),
+          label: Text(
+            paused ? 'Run at ${timeWarp.rate.round()}×' : 'Pause time warp',
+          ),
+        ),
         Text(
           message,
           style: const TextStyle(color: dim, fontSize: 10, height: 1.5),
@@ -559,7 +1415,9 @@ class _SimulatorState extends State<SimulatorScreen>
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
               child: Text(
                 widget.store.persistent
-                    ? 'TRAINING SANDBOX · Campaign funds and progress are separate · Autosave; restored flights pause'
+                    ? (campaignMode
+                          ? 'CAMPAIGN MISSION · Assembled vehicle / actual costs and payload · Restored flights pause'
+                          : 'TRAINING SANDBOX · Campaign funds and progress are separate · Autosave; restored flights pause')
                     : 'SESSION ONLY · Simulator progress will be lost on reload',
                 style: TextStyle(
                   color: widget.store.persistent ? dim : orange,
@@ -573,73 +1431,30 @@ class _SimulatorState extends State<SimulatorScreen>
                   final wide = b.maxWidth > 900;
                   final canvas = flight == null
                       ? LayoutBuilder(
-                          builder: (c, box) {
-                            final cell = min(
-                              box.maxWidth / 9,
-                              box.maxHeight / 12,
-                            );
-                            final width = cell * 9, height = cell * 12;
-                            return Center(
-                              child: SizedBox(
-                                width: width,
-                                height: height,
-                                child: GestureDetector(
-                                  key: const ValueKey('assembly-grid'),
-                                  onTapUp: (d) => place(
-                                    (d.localPosition.dx / cell).floor(),
-                                    (d.localPosition.dy / cell).floor(),
-                                  ),
-                                  onPanStart: (d) {
-                                    selected = design.parts
-                                        .where(
-                                          (p) =>
-                                              p.x ==
-                                                  (d.localPosition.dx / cell)
-                                                      .floor() &&
-                                              p.y ==
-                                                  (d.localPosition.dy / cell)
-                                                      .floor(),
-                                        )
-                                        .firstOrNull;
-                                    setState(() {});
-                                  },
-                                  onPanUpdate: (d) {
-                                    final p = selected;
-                                    if (p != null) {
-                                      move(
-                                        (d.localPosition.dx / cell).floor() -
-                                            p.x,
-                                        (d.localPosition.dy / cell).floor() -
-                                            p.y,
-                                      );
-                                    }
-                                  },
-                                  child: Semantics(
-                                    container: true,
-                                    image: true,
-                                    label: 'Rocket assembly grid',
-                                    child: CustomPaint(
-                                      painter: AssemblyPainter(
-                                        design,
-                                        selected,
-                                      ),
-                                      child: const SizedBox.expand(),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            );
-                          },
+                          builder: (c, box) => constructionCanvas(box),
                         )
-                      : CustomPaint(
-                          painter: FlightPainter(
-                            flight!,
-                            prediction,
-                            map,
-                            zoom,
-                            !paused,
+                      : GestureDetector(
+                          onPanUpdate: map
+                              ? (d) => setState(() => mapPan += d.delta)
+                              : null,
+                          child: Semantics(
+                            container: true,
+                            image: true,
+                            label: map
+                                ? 'Flight trajectory map'
+                                : 'Vehicle tracking view',
+                            child: CustomPaint(
+                              painter: FlightPainter(
+                                flight!,
+                                prediction,
+                                map,
+                                map ? zoom : cameraZoom,
+                                !paused,
+                                pan: mapPan,
+                              ),
+                              child: const SizedBox.expand(),
+                            ),
                           ),
-                          child: const SizedBox.expand(),
                         );
                   final tools = Padding(
                     padding: const EdgeInsets.all(12),
@@ -682,300 +1497,4 @@ class _SimulatorState extends State<SimulatorScreen>
       ),
     ),
   );
-}
-
-void paintPart(
-  Canvas c,
-  RocketPart p,
-  Offset center,
-  double size, {
-  bool selected = false,
-  double flame = 0,
-}) {
-  c.save();
-  c.translate(center.dx, center.dy);
-  c.rotate(p.rotation * pi / 2);
-  final r = Rect.fromCenter(
-    center: Offset.zero,
-    width: size * .74,
-    height: size * .94,
-  );
-  final metal = Paint()
-    ..shader = const LinearGradient(
-      colors: [Color(0xff737e88), Color(0xffe4e9eb), Color(0xff8c969e)],
-    ).createShader(r);
-  if (p.kind == 'capsule') {
-    c.drawPath(
-      Path()
-        ..moveTo(0, -size * .46)
-        ..lineTo(size * .37, size * .4)
-        ..lineTo(-size * .37, size * .4)
-        ..close(),
-      metal,
-    );
-    c.drawCircle(
-      Offset(0, size * .1),
-      size * .1,
-      Paint()..color = const Color(0xff253949),
-    );
-  } else if (p.kind == 'engine') {
-    c.drawRect(
-      Rect.fromLTWH(-size * .25, -size * .45, size * .5, size * .2),
-      metal,
-    );
-    c.drawPath(
-      Path()
-        ..moveTo(-size * .17, -size * .3)
-        ..lineTo(-size * .36, size * .4)
-        ..lineTo(size * .36, size * .4)
-        ..lineTo(size * .17, -size * .3)
-        ..close(),
-      Paint()..color = dim,
-    );
-    if (flame > 0) {
-      c.drawPath(
-        Path()
-          ..moveTo(-size * .2, size * .4)
-          ..lineTo(0, size * (.6 + flame))
-          ..lineTo(size * .2, size * .4)
-          ..close(),
-        Paint()..color = orange,
-      );
-    }
-  } else if (p.kind == 'separator') {
-    c.drawRect(
-      Rect.fromCenter(
-        center: Offset.zero,
-        width: size * .8,
-        height: size * .25,
-      ),
-      Paint()..color = orange,
-    );
-  } else {
-    c.drawRect(
-      r,
-      p.kind == 'science' ? (Paint()..color = const Color(0xff9f8c54)) : metal,
-    );
-    c.drawLine(
-      Offset(r.left, r.top + size * .12),
-      Offset(r.right, r.top + size * .12),
-      Paint()..color = ink,
-    );
-    if (p.kind == 'tank') {
-      c.drawRect(
-        Rect.fromLTWH(
-          r.left + 2,
-          r.bottom - 4,
-          (r.width - 4) * (p.fuel / 12000).clamp(0, 1),
-          2,
-        ),
-        Paint()..color = cyan,
-      );
-    }
-    if (p.kind == 'science') {
-      c.drawCircle(Offset.zero, size * .18, Paint()..color = ink);
-    }
-  }
-  if (selected) {
-    c.drawRect(
-      Rect.fromCenter(
-        center: Offset.zero,
-        width: size * .98,
-        height: size * .98,
-      ),
-      Paint()
-        ..color = cyan
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 2,
-    );
-  }
-  c.restore();
-}
-
-class AssemblyPainter extends CustomPainter {
-  final Assembly design;
-  final RocketPart? selected;
-  AssemblyPainter(this.design, this.selected);
-  @override
-  void paint(Canvas c, Size s) {
-    c.drawRect(Offset.zero & s, Paint()..color = panel);
-    final cell = s.width / 9,
-        pen = Paint()
-          ..color = dim.withValues(alpha: .2)
-          ..strokeWidth = .6;
-    for (var i = 0; i <= 9; i++) {
-      c.drawLine(Offset(i * cell, 0), Offset(i * cell, s.height), pen);
-    }
-    for (var i = 0; i <= 12; i++) {
-      c.drawLine(Offset(0, i * cell), Offset(s.width, i * cell), pen);
-    }
-    for (final a in design.parts) {
-      for (final b in design.parts) {
-        if ((a.x - b.x).abs() + (a.y - b.y).abs() == 1) {
-          c.drawLine(
-            Offset((a.x + .5) * cell, (a.y + .5) * cell),
-            Offset((b.x + .5) * cell, (b.y + .5) * cell),
-            Paint()
-              ..color = dim
-              ..strokeWidth = 3,
-          );
-        }
-      }
-    }
-    for (final p in design.parts) {
-      paintPart(
-        c,
-        p,
-        Offset((p.x + .5) * cell, (p.y + .5) * cell),
-        cell,
-        selected: p == selected,
-      );
-    }
-  }
-
-  @override
-  bool shouldRepaint(AssemblyPainter old) => true;
-}
-
-class FlightPainter extends CustomPainter {
-  final SandboxFlight f;
-  final List<Point2> prediction;
-  final bool map, running;
-  final double zoom;
-  FlightPainter(this.f, this.prediction, this.map, this.zoom, this.running);
-  @override
-  void paint(Canvas c, Size s) {
-    c.save();
-    c.clipRect(Offset.zero & s);
-    c.drawRect(Offset.zero & s, Paint()..color = ink);
-    if (map) {
-      final extent = max(
-        SandboxFlight.radius * 1.3,
-        min(
-          SandboxFlight.radius * 8,
-          prediction.fold<double>(
-            f.position.length,
-            (a, p) => max(a, p.length),
-          ),
-        ),
-      );
-      final scale = s.shortestSide * .44 / extent * zoom;
-      final focus = max(0.0, 1 - 1 / zoom);
-      final center =
-          Offset(s.width / 2, s.height / 2) -
-          Offset(f.position.x * scale, -f.position.y * scale) * focus;
-      Offset screen(Point2 p) => center + Offset(p.x * scale, -p.y * scale);
-      c.drawCircle(
-        center,
-        SandboxFlight.radius * scale,
-        Paint()..color = const Color(0xff244558),
-      );
-      c.drawCircle(
-        center,
-        (SandboxFlight.radius + 100000) * scale,
-        Paint()
-          ..color = dim
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = .7,
-      );
-      final path = Path();
-      for (var i = 0; i < prediction.length; i++) {
-        final p = screen(prediction[i]);
-        if (i == 0) {
-          path.moveTo(p.dx, p.dy);
-        } else {
-          path.lineTo(p.dx, p.dy);
-        }
-      }
-      c.drawPath(
-        path,
-        Paint()
-          ..color = cyan
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 1.5,
-      );
-      c.drawCircle(screen(f.position), 5, Paint()..color = orange);
-      instrumentText(
-        c,
-        'EARTH / COAST TRAJECTORY',
-        const Offset(12, 15),
-        color: cyan,
-      );
-      instrumentText(
-        c,
-        '100 KM ATMOSPHERE REFERENCE',
-        const Offset(12, 32),
-        size: 8,
-      );
-    } else {
-      final altitude = max(0, f.altitude);
-      c.drawRect(
-        Offset.zero & s,
-        Paint()
-          ..shader = LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              ink,
-              Color.lerp(
-                const Color(0xff527e98),
-                ink,
-                (altitude / 100000).clamp(0, 1),
-              )!,
-            ],
-          ).createShader(Offset.zero & s),
-      );
-      final cell = min(s.width / 12, s.height / 16).clamp(12.0, 40.0);
-      final parts = f.craft.parts;
-      final cx = parts.isEmpty
-          ? 4.0
-          : parts.map((p) => p.x).reduce((a, b) => a + b) / parts.length;
-      final cy = parts.isEmpty
-          ? 5.0
-          : parts.map((p) => p.y).reduce((a, b) => a + b) / parts.length;
-      if (altitude < 1000) {
-        final ground = min(s.height - 15, s.height * .65 + altitude * .15);
-        c.drawRect(
-          Rect.fromLTWH(0, ground, s.width, s.height),
-          Paint()..color = const Color(0xff293832),
-        );
-      }
-      c.save();
-      c.translate(s.width / 2, s.height * .45);
-      c.rotate(f.angle);
-      for (final p in parts) {
-        paintPart(
-          c,
-          p,
-          Offset((p.x - cx) * cell, (p.y - cy) * cell),
-          cell,
-          flame:
-              running &&
-                  f.launched &&
-                  !f.ended &&
-                  f.craft.engines.contains(p) &&
-                  f.craft.tanksFor(p).isNotEmpty
-              ? f.throttle
-              : 0,
-        );
-      }
-      c.restore();
-      instrumentText(
-        c,
-        'TRACKING / ACTUAL ASSEMBLY',
-        const Offset(12, 15),
-        color: cyan,
-      );
-      instrumentText(
-        c,
-        'Use Trajectory map to inspect orbit and impact.',
-        Offset(12, s.height - 20),
-        size: 8,
-      );
-    }
-    c.restore();
-  }
-
-  @override
-  bool shouldRepaint(FlightPainter old) => true;
 }

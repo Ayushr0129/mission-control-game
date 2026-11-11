@@ -50,7 +50,7 @@ void main() {
     final store = await mount(t);
     await tap(t, 'Enter mission control');
     await tap(t, 'Touch the edge');
-    await tap(t, 'Design spacecraft');
+    await tap(t, 'Subsystem design planner');
     await tap(t, 'Pin design for comparison');
     await tap(t, 'Scout light launcher · \$3M · 1500 kg');
     expect(find.textContaining('Cost -2.0 M'), findsOneWidget);
@@ -73,7 +73,7 @@ void main() {
       expect(find.text('Flight director console.'), findsOneWidget);
       await tap(t, 'Enter mission control');
       await tap(t, 'Touch the edge');
-      await tap(t, 'Design spacecraft');
+      await tap(t, 'Subsystem design planner');
       expect(find.text('FLIGHT READY'), findsOneWidget);
       await tap(t, 'Electrical');
       await tap(t, 'Solar wings');
@@ -115,7 +115,7 @@ void main() {
       await mount(t, width: 1440);
       await tap(t, 'Enter mission control');
       await tap(t, 'Touch the edge');
-      await tap(t, 'Design spacecraft');
+      await tap(t, 'Subsystem design planner');
       await tap(t, 'Proceed to launch');
       final game =
           (t.widget(find.byWidgetPredicate((w) => w is GameWidget))

@@ -16,7 +16,7 @@ async def main():
   async def ready():
    await page.goto(BASE_URL);await page.locator('flt-semantics-placeholder').evaluate('(e)=>e.click()');await page.get_by_text('Flight director console.',exact=True).wait_for()
   await ready();print('Offline desktop startup passed',flush=True)
-  await click('Enter mission control');await click('Touch the edge');await click('Design spacecraft')
+  await click('Enter mission control');await click('Touch the edge');await click('Subsystem design planner')
   await page.get_by_text('FLIGHT READY',exact=True).wait_for();await page.screenshot(path=str(OUTPUT/'workshop.png'))
   await click('Proceed to launch');await click('Save & return to console')
   await ready();await click('Continue mission');await page.get_by_text('SIMULATION PAUSED',exact=True).wait_for();print('Reload and paused active-flight restore passed',flush=True)

@@ -168,7 +168,7 @@ def run_scenario(browser, device=None, engine="browser"):
         ready()
         click('Enter mission control')
         click('Touch the edge')
-        click('Design spacecraft')
+        click('Subsystem design planner')
         click('Pin design for comparison')
         click('Scout light launcher · $3M · 1500 kg')
         page.get_by_text('Cost -2.0 M', exact=False).wait_for()

@@ -130,7 +130,7 @@ void main() {
       expect(find.textContaining('Reloading will lose it'), findsOneWidget);
       await tap('Enter mission control');
       await tap('Touch the edge');
-      await tap('Design spacecraft');
+      await tap('Subsystem design planner');
       await tap('Proceed to launch');
       await tap('Save & return to console');
       expect(store.load().funding, closeTo(34.2, .001));
