@@ -976,15 +976,23 @@ class _SimulatorState extends State<SimulatorScreen>
       ),
       Wrap(
         children: [
-          IconButton(
-            tooltip: 'Undo',
-            onPressed: undoStack.isEmpty ? null : undo,
-            icon: const Icon(Icons.undo),
+          Tooltip(
+            message: 'Undo',
+            excludeFromSemantics: true,
+            child: TextButton.icon(
+              onPressed: undoStack.isEmpty ? null : undo,
+              icon: const Icon(Icons.undo),
+              label: const Text('Undo'),
+            ),
           ),
-          IconButton(
-            tooltip: 'Redo',
-            onPressed: redoStack.isEmpty ? null : redo,
-            icon: const Icon(Icons.redo),
+          Tooltip(
+            message: 'Redo',
+            excludeFromSemantics: true,
+            child: TextButton.icon(
+              onPressed: redoStack.isEmpty ? null : redo,
+              icon: const Icon(Icons.redo),
+              label: const Text('Redo'),
+            ),
           ),
           TextButton(
             onPressed: () => setState(() => panMode = !panMode),
