@@ -3,15 +3,16 @@ import { storyForEvents } from '../../data/story/flightScripts';
 import { FlightState, FlightTelemetry, createFlight, flightTelemetry, recoverFlight, setControl, setGuidanceMode, setWarp, stepFlight, trainingManeuver } from '../../domain/sim/flight';
 import { v3 } from '../../domain/sim/units';
 import { fmt, h } from '../dom';
+import { rocketVisual, updateRocketFlames } from '../rocketVisual';
 
 export interface FlightViewOptions { blueprint: RocketBlueprint; seed: number; initialState?: FlightState; onAutosave: (state: FlightState) => void; onComplete: (state: FlightState) => void; onPause: () => void }
 const SAS = ['stability', 'prograde', 'retrograde', 'normal', 'radial-out', 'maneuver'] as const;
 
 export function flightView(options: FlightViewOptions): HTMLElement {
   let state = options.initialState?.physicsVersion===2 ? options.initialState : createFlight(options.blueprint, options.seed), running = true, last = performance.now(), lastAutosave = -1, debugVisible=false;
-  const root = h('section', { class: 'flight-console' }), map = h('canvas', { class: 'orbit-map', 'aria-label': 'Orbital map' }) as HTMLCanvasElement;
+  const root = h('section', { class: 'flight-console' }), map = h('canvas', { class: 'orbit-map', 'aria-label': 'Orbital map' }) as HTMLCanvasElement,vehicleVisual=rocketVisual(options.blueprint,{className:'flight-rocket',label:`${options.blueprint.name} in flight`}),mapWrap=h('div',{class:'orbit-map-wrap'},map,vehicleVisual);
   const hud = h('div', { class: 'flight-hud' }), radio = h('div', { class: 'radio-log', 'aria-live': 'polite' }, 'CAPCOM: Vehicle telemetry is nominal.'), controls = h('div', { class: 'flight-controls' }),debug=h('pre',{class:'flight-debug',hidden:'true'});
-  root.append(h('header', {}, h('b', {}, 'MISSION FLIGHT · FORWARD ONLY'), h('button', { onclick: options.onPause }, 'Ⅱ Pause')), map, hud, controls, debug, radio);
+  root.append(h('header', {}, h('b', {}, 'MISSION FLIGHT · FORWARD ONLY'), h('button', { onclick: options.onPause }, 'Ⅱ Pause')), mapWrap, hud, controls, debug, radio);
 
   const draw = (t: FlightTelemetry) => {
     const ctx = map.getContext('2d');
@@ -24,6 +25,7 @@ export function flightView(options: FlightViewOptions): HTMLElement {
     }
     const values = [['PHASE', state.phase], ['MET', `${Math.floor(state.missionTimeS / 60)}:${String(Math.floor(state.missionTimeS % 60)).padStart(2, '0')}`], ['ALT', `${fmt(t.altitudeM / 1000, 1)} km`], ['VEL', `${fmt(t.surfaceSpeedMps, 0)} m/s`], ['HORIZ',`${fmt(t.horizontalSpeedMps,0)} m/s`],['AP / PE', `${fmt(t.apoapsisM / 1000, 0)} / ${fmt(t.periapsisM / 1000, 0)} km`], ['ECC', fmt(t.eccentricity, 3)], ['ΔV', `${fmt(t.deltaVRemainingMps, 0)} m/s`], ['TWR', fmt(t.twr, 2)], ['FUEL', `${fmt(t.fuelKg / 1000, 1)} t`], ['Q', `${fmt(t.qPa / 1000, 1)} kPa`], ['ATT',`${fmt(t.attitudeDeg,1)}°`],['COMMS', t.comm ? 'LINK' : 'BLACKOUT'], ['WARP', `${state.warp}×`]];
     hud.replaceChildren(...values.map(([key, value]) => h('div', {}, h('small', {}, key), h('b', {}, value))));
+    updateRocketFlames(vehicleVisual,Math.min(1,t.thrustN/Math.max(1,t.massKg*9.80665*1.5)),t.altitudeM);vehicleVisual.style.transform=`translate(-50%,-50%) rotate(${t.attitudeDeg}deg)`;
     debug.textContent=`ALT       ${fmt(t.altitudeM,1)} m\nSPEED     ${fmt(t.surfaceSpeedMps,1)} m/s\nHORIZONTAL ${fmt(t.horizontalSpeedMps,1)} m/s\nTWR       ${fmt(t.twr,3)}\nTHRUST    ${fmt(t.thrustN/1000,1)} kN\nDRAG      ${fmt(t.dragN/1000,3)} kN\nQ         ${fmt(t.qPa/1000,3)} kPa\nMASS      ${fmt(t.massKg,0)} kg\nFUEL      ${fmt(t.fuelKg,0)} kg\nAP / PE   ${fmt(t.apoapsisM/1000,2)} / ${fmt(t.periapsisM/1000,2)} km\nPERIOD    ${fmt(t.periodS,1)} s\nSTAGE     ${t.activeStage}\n${t.structuralWarning?'⚠ STRUCTURAL LIMIT EXCEEDED':''}`;
   };
 
