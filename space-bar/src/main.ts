@@ -1,4 +1,5 @@
 import './style.css';
+import './flight.css';
 import './feel.css';
 import { content, briefing, eraSources, endingFor, history as realHistory, phaseNames } from './data';
 import { crews, missionName, scenes, storyOrder, slotOrder, CABIN, SITE, stationOf, papers, Person } from './data/story';

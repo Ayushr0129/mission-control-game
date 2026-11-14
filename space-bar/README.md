@@ -84,3 +84,13 @@ Historical Campaign hardware is data-driven and runtime-validated:
 To add a part, add one entry to the appropriate category array in `src/data/parts/index.ts`. Supply all shared fields and the fields required by that category; startup validation and TypeScript will report missing or duplicate data. To add a rocket, add a `RocketBlueprint` to `src/data/rockets.ts` using existing part IDs. No domain or UI changes are required.
 
 The Historical Campaign is deliberately forward-only. Every irreversible transition is confirmed and autosaved. Its only exit is **Pause → Save & Quit to Main Menu**.
+
+## Orbital flight console
+
+The Historical Campaign now launches the exact `RocketBlueprint` committed in the laboratory into a deterministic, autosaved flight session. The console provides an orbital map, apoapsis/periapsis, eccentricity, velocity, altitude, delta-v, propellant, TWR, dynamic pressure, heating, g-load, communications and time warp. Space stages, the throttle slider controls thrust, arrow keys control pitch/roll, Q/E controls yaw, and R/F commands translation RCS. SAS buttons select stability, prograde, retrograde, normal, radial and maneuver modes.
+
+For the guided Moon route, open **Flight Manual**, launch, plan circularization, plan TLI, coast under time warp, execute LOI, begin landing, return to Earth and recover the crew. Guidance shortcuts deliberately compress multi-day transfers and terminal operations so students can practise the full mission loop in a classroom session; the underlying coast/orbit state remains deterministic and serializable.
+
+Simulation code lives in `src/domain/sim/`: SI-unit vectors and constants, celestial bodies, atmosphere, Kepler/state-vector conversions, fixed-step propagation, seeded randomness, part-driven vehicle dynamics and the flight state machine. Add celestial bodies in `bodies.ts`, missions in `src/data/missions/index.ts`, and event-driven radio dialogue in `src/data/story/flightScripts.ts`.
+
+Physical simplifications: gravity is two-body patched-conic rather than n-body; maneuver nodes are impulsive; atmosphere is interpolated and rotates approximately with Earth; lift is not modeled; attitude/RCS commands are simplified; engine failures use seeded reliability; communications use line-of-sight/range; heating and ablation are educational approximations. The Flight School LOI, landing and return commands reposition the vehicle to representative training states rather than integrating every day of travel.
