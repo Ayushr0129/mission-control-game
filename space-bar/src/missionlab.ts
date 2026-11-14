@@ -72,6 +72,13 @@ const FR: Record<string, string> = {
   'What the margins mean': 'Comprendre les marges', 'Budget is not the only limit. The launch vehicle must lift the wet mass; generation must exceed peak load; and available delta-v must cover the trajectory plus contingency.': "Le budget n'est pas la seule limite. Le lanceur doit soulever la masse au lancement ; la production électrique doit dépasser la pointe de charge ; et le delta-v disponible doit couvrir la trajectoire et la réserve.",
   'Load engineering baseline': 'Charger la configuration de référence', 'Proceed to flight': 'Passer au vol',
   'Select components to begin assembly': "Sélectionnez des composants pour commencer l'assemblage",
+  'PARTS': 'PIÈCES', 'BUILD MODE': 'MODE ASSEMBLAGE', 'FLIGHT ENGINEERING': 'INGÉNIERIE DE VOL',
+  'Estimated thrust': 'Poussée estimée', 'Thrust / weight': 'Poussée / poids', 'Propulsive stages': 'Étages propulsifs',
+  'Click a component to fit or remove it. Select a fitted stage in the vehicle to inspect or remove it.': "Cliquez sur un composant pour l'installer ou le retirer. Sélectionnez un étage du véhicule pour l'inspecter ou le retirer.",
+  'LAUNCH VEHICLE CONFIGURATION': 'CONFIGURATION DU LANCEUR', 'FITTED': 'INSTALLÉ', 'AVAILABLE': 'DISPONIBLE',
+  'DRAG PARTS INTO THE STACK · CLICK TO ADD ANOTHER': 'GLISSEZ LES PIÈCES DANS LA FUSÉE · CLIQUEZ POUR EN AJOUTER',
+  'DROP HERE': 'DÉPOSER ICI', 'ADD': 'AJOUTER', 'copies fitted': 'exemplaires installés',
+  'Drag parts into any highlighted gap. Click a palette part to add another copy; use the arrows or drag fitted parts to reorder them.': "Glissez les pièces dans n'importe quel espace surligné. Cliquez sur une pièce de la palette pour en ajouter une autre ; utilisez les flèches ou faites glisser les pièces installées pour les réordonner.",
   'FLIGHT DYNAMICS': 'DYNAMIQUE DE VOL', 'Fly the rendezvous and dock under RCS': 'Effectuez le rendez-vous et amarrez-vous avec le RCS',
   'SIMULATION LOCKED': 'SIMULATION VERROUILLÉE', 'PROXIMITY OPERATIONS': 'OPÉRATIONS DE PROXIMITÉ', 'RCS flight model active · target motion is relative': 'Modèle de vol RCS actif · mouvement relatif à la cible',
   'ROT −': 'ROT −', 'ROT +': 'ROT +', 'UP': 'HAUT', 'DOWN': 'BAS', 'LEFT': 'GAUCHE', 'RIGHT': 'DROITE',
@@ -168,7 +175,7 @@ const tabMeta: { id: Tab; no: string; label: string }[] = [
 ];
 
 interface LabState { profileId: string; partIds: string[]; deployed: boolean; samples: number; notes: string[] }
-const starter = ['booster', 'tank', 'vac', 'computer', 'rcs', 'wheels', 'solar', 'battery', 'dish', 'adapter'];
+const starter = ['booster', 'tank', 'vac', 'computer', 'rcs', 'wheels', 'solar', 'battery', 'dish', 'adapter', 'fairing'];
 let state: LabState = loadState();
 let lastTab: Tab = 'brief';
 
@@ -182,6 +189,10 @@ function loadState(): LabState {
 function saveState() { try { localStorage.setItem('spacebar.missionlab.v1', JSON.stringify(state)); } catch { /* optional */ } }
 const profile = () => profiles.find((p) => p.id === state.profileId) ?? profiles[1];
 const payloadPartId = (p = profile()) => p.payload === 'satellite' ? 'sat' : p.payload;
+const baselineFor = (p = profile()) => {
+  const core = starter.filter((id) => id !== 'fairing' && (p.id !== 'earth' || (id !== 'adapter' && id !== 'wheels')));
+  return [...core, payloadPartId(p), 'fairing'];
+};
 const chosen = () => state.partIds.map((id) => parts.find((p) => p.id === id)).filter((p): p is Part => !!p);
 const sums = () => chosen().reduce((a, p) => ({ mass: a.mass + p.mass, cost: a.cost + p.cost, power: a.power + p.power, deltaV: a.deltaV + p.deltaV }), { mass: 0, cost: 0, power: 0, deltaV: 0 });
 const has = (tag: string) => chosen().some((p) => p.tags.includes(tag));
@@ -240,29 +251,79 @@ export function missionLab(onBack: () => void): HTMLElement {
 
   function vehiclePanel() {
     const categories: Category[] = ['Structure', 'Propulsion', 'Guidance', 'Power', 'Communications', 'Payload'];
-    const catalogue = h('div', { class: 'part-catalogue' }, ...categories.map((cat) => h('section', {}, h('h4', {}, cat),
-      ...parts.filter((p) => p.category === cat).map((p) => {
-        const fitted = state.partIds.includes(p.id);
-        return h('button', { class: `catalogue-part ${fitted ? 'fitted' : ''}`, type: 'button', onclick: () => {
-          if (fitted) state.partIds.splice(state.partIds.indexOf(p.id), 1); else state.partIds.push(p.id);
-          saveState(); renderPanel();
-        } }, h('span', {}, h('b', {}, p.name), h('small', {}, p.note)),
-        h('span', { class: 'part-spec' }, h('i', {}, `${p.mass} t`), h('i', {}, `$${p.cost}M`), h('strong', {}, fitted ? 'REMOVE' : '+ FIT')));
-      }))));
+    const dragType = 'application/x-spacebar-part';
+    const addPart = (p: Part, at = state.partIds.length) => {
+      state.partIds.splice(Math.max(0, Math.min(at, state.partIds.length)), 0, p.id);
+      saveState(); renderPanel();
+    };
+    const removePart = (index: number) => { state.partIds.splice(index, 1); saveState(); renderPanel(); };
+    const startDrag = (ev: DragEvent, partId: string, sourceIndex?: number) => {
+      const data = JSON.stringify({ partId, sourceIndex });
+      ev.dataTransfer?.setData(dragType, data); ev.dataTransfer?.setData('text/plain', data);
+      if (ev.dataTransfer) ev.dataTransfer.effectAllowed = sourceIndex == null ? 'copy' : 'move';
+      root.classList.add('part-dragging');
+    };
+    const finishDrag = () => root.classList.remove('part-dragging');
+    const dropPart = (ev: DragEvent, insertion: number) => {
+      ev.preventDefault(); ev.stopPropagation();
+      const raw = ev.dataTransfer?.getData(dragType) || ev.dataTransfer?.getData('text/plain');
+      if (!raw) return finishDrag();
+      try {
+        const data = JSON.parse(raw) as { partId: string; sourceIndex?: number };
+        let target = insertion;
+        if (typeof data.sourceIndex === 'number') {
+          if (data.sourceIndex < target) target--;
+          state.partIds.splice(data.sourceIndex, 1);
+        }
+        state.partIds.splice(Math.max(0, Math.min(target, state.partIds.length)), 0, data.partId);
+        saveState(); renderPanel();
+      } finally { finishDrag(); }
+    };
+    const catalogue = h('aside', { class: 'parts-console', 'aria-label': 'Spacecraft parts' },
+      h('div', { class: 'parts-console-head' }, h('b', {}, 'PARTS'), h('span', {}, `${parts.length}`)),
+      h('p', { class: 'drag-instruction' }, 'DRAG PARTS INTO THE STACK · CLICK TO ADD ANOTHER'),
+      h('div', { class: 'part-catalogue' }, ...categories.map((cat) => h('section', {}, h('h4', {}, cat),
+        h('div', { class: 'part-tile-grid' }, ...parts.filter((p) => p.category === cat).map((p) => {
+          const count = state.partIds.filter((id) => id === p.id).length;
+          return h('button', { class: `part-tile ${count ? 'fitted' : ''}`, type: 'button', draggable: 'true', title: `${p.name} · ${p.mass} t · $${p.cost}M`, 'aria-label': `Add ${p.name}`, onclick: () => addPart(p), ondragstart: (ev: DragEvent) => startDrag(ev, p.id), ondragend: finishDrag },
+            h('i', { class: `part-render render-${p.id}`, 'aria-hidden': 'true' }),
+            h('span', {}, p.short), h('small', {}, count ? `${count} × FITTED` : '+ ADD'));
+        }))))));
+    const entries = state.partIds.map((id, index) => ({ part: parts.find((p) => p.id === id), index })).filter((entry): entry is { part: Part; index: number } => !!entry.part).reverse();
+    const dropZone = (visualGap: number) => {
+      const insertion = state.partIds.length - visualGap;
+      return h('div', { class: 'stack-drop-zone', ondragover: (ev: DragEvent) => { ev.preventDefault(); if (ev.dataTransfer) ev.dataTransfer.dropEffect = 'move'; }, ondragenter: (ev: DragEvent) => (ev.currentTarget as HTMLElement).classList.add('active'), ondragleave: (ev: DragEvent) => (ev.currentTarget as HTMLElement).classList.remove('active'), ondrop: (ev: DragEvent) => dropPart(ev, insertion) }, h('span', {}, 'DROP HERE'));
+    };
+    const stackNodes: HTMLElement[] = [dropZone(0)];
+    entries.forEach(({ part: p, index }, visualIndex) => {
+      stackNodes.push(h('div', { class: `stack-part stack-${p.id} cat-${p.category.toLowerCase()}` },
+        h('div', { class: `stack-part-body render-${p.id}`, draggable: 'true', title: p.note, role: 'button', tabindex: '0', 'aria-label': `Move ${p.name}`, ondragstart: (ev: DragEvent) => startDrag(ev, p.id, index), ondragend: finishDrag }, h('span', {}, p.short)),
+        h('div', { class: 'stack-callout' }, h('b', {}, p.name), h('small', {}, `${p.mass} t · $${p.cost}M`),
+          h('span', {},
+            h('button', { type: 'button', 'aria-label': `Move ${p.name} up`, onclick: () => { if (index < state.partIds.length - 1) [state.partIds[index + 1], state.partIds[index]] = [state.partIds[index], state.partIds[index + 1]]; saveState(); renderPanel(); } }, '↑'),
+            h('button', { type: 'button', 'aria-label': `Move ${p.name} down`, onclick: () => { if (index > 0) [state.partIds[index - 1], state.partIds[index]] = [state.partIds[index], state.partIds[index - 1]]; saveState(); renderPanel(); } }, '↓'),
+            h('button', { type: 'button', 'aria-label': `Remove ${p.name}`, onclick: () => removePart(index) }, '×')))));
+      stackNodes.push(dropZone(visualIndex + 1));
+    });
     const stack = h('div', { class: 'vehicle-stack', 'aria-label': 'Assembled launch vehicle' },
       h('div', { class: 'stack-axis' }),
-      ...(chosen().length ? [...chosen()].reverse().map((p, reverseIndex) => {
-        const index = chosen().length - 1 - reverseIndex;
-        return h('div', { class: `stack-part cat-${p.category.toLowerCase()}` }, h('span', {}, p.short), h('b', {}, p.name),
-          h('button', { type: 'button', 'aria-label': `Move ${p.name} down`, onclick: () => { if (index > 0) [state.partIds[index - 1], state.partIds[index]] = [state.partIds[index], state.partIds[index - 1]]; saveState(); renderPanel(); } }, '↓'),
-          h('button', { type: 'button', 'aria-label': `Remove ${p.name}`, onclick: () => { state.partIds.splice(index, 1); saveState(); renderPanel(); } }, '×'));
-      }) : [h('div', { class: 'empty-stack' }, 'Select components to begin assembly')]));
+      ...(entries.length ? stackNodes : [dropZone(0), h('div', { class: 'empty-stack' }, 'Select components to begin assembly')]));
     const missing = readiness();
+    const total = sums();
+    const thrust = chosen().reduce((sum, p) => sum + (p.id === 'booster' ? 760 : p.id === 'vac' ? 110 : p.id === 'kick' ? 45 : p.id === 'ion' ? .002 : 0), 0);
+    const twr = total.mass > 0 ? thrust / (total.mass * 9.81) : 0;
+    const engineering = h('aside', { class: 'engineering-console' },
+      h('div', { class: 'engineering-title' }, h('span', {}, 'BUILD MODE'), h('b', {}, 'FLIGHT ENGINEERING')),
+      h('dl', {}, h('div', {}, h('dt', {}, 'Wet mass'), h('dd', {}, `${fmt(total.mass, 2)} t`)),
+        h('div', {}, h('dt', {}, 'Estimated thrust'), h('dd', {}, `${fmt(thrust, 1)} kN`)),
+        h('div', { class: twr >= 1.15 ? 'nominal' : 'warning' }, h('dt', {}, 'Thrust / weight'), h('dd', {}, fmt(twr, 2))),
+        h('div', {}, h('dt', {}, 'Propulsive stages'), h('dd', {}, String(chosen().filter((p) => p.tags.includes('engine')).length)))),
+      h('p', {}, 'Drag parts into any highlighted gap. Click a palette part to add another copy; use the arrows or drag fitted parts to reorder them.'),
+      h('div', { class: `readiness ${missing.length ? 'not-ready' : ''}` }, h('b', {}, missing.length ? 'FLIGHT HOLD' : 'CONFIGURATION READY'), h('p', {}, missing.length ? `Resolve: ${missing.join(' · ')}` : 'All mission-critical margins are positive.')));
     return panelShell('VEHICLE INTEGRATION', 'Build the flight stack, one component at a time',
-      h('div', { class: 'assembly-layout' }, catalogue, h('section', { class: 'stack-bay' }, h('div', { class: 'bay-head' }, h('span', {}, 'INTEGRATION BAY 04'), h('span', {}, `${chosen().length} COMPONENTS`)), stack,
-        h('div', { class: `readiness ${missing.length ? 'not-ready' : ''}` }, h('b', {}, missing.length ? 'FLIGHT HOLD' : 'CONFIGURATION READY'), h('p', {}, missing.length ? `Resolve: ${missing.join(' · ')}` : 'All mission-critical margins are positive.')))),
+      h('div', { class: 'assembly-layout' }, catalogue, h('section', { class: 'stack-bay' }, h('div', { class: 'bay-head' }, h('span', {}, 'LAUNCH VEHICLE CONFIGURATION'), h('span', {}, `${chosen().length} COMPONENTS`)), stack), engineering),
       lesson('What the margins mean', 'Budget is not the only limit. The launch vehicle must lift the wet mass; generation must exceed peak load; and available delta-v must cover the trajectory plus contingency.'),
-      h('div', { class: 'lab-actions' }, labButton('Load engineering baseline', () => { state.partIds = [...starter, payloadPartId()]; saveState(); renderPanel(); }), labButton('Proceed to flight', () => changeTab('flight'), true, missing.length > 0)));
+      h('div', { class: 'lab-actions' }, labButton('Load engineering baseline', () => { state.partIds = baselineFor(); saveState(); renderPanel(); }), labButton('Proceed to flight', () => changeTab('flight'), true, missing.length > 0)));
   }
 
   function flightPanel() {
@@ -294,7 +355,12 @@ export function missionLab(onBack: () => void): HTMLElement {
     const p = profile(), payload = parts.find((x) => x.id === payloadPartId(p))!;
     const canDeploy = has(p.payload) && has('comms') && has('computer');
     const op = p.payload === 'rover' ? h('div', { class: 'rover-field' }, h('div', { class: 'rover' }, '▰─○─○'), h('div', { class: 'terrain-line' }))
-      : h('div', { class: 'satellite-field' }, h('div', { class: `payload-object ${state.deployed ? 'deployed' : ''}` }, h('i', {}), h('b', {}, payload.short), h('i', {})));
+      : p.payload === 'satellite' ? h('div', { class: 'orbital-yard' },
+        h('div', { class: `station-assembly ${state.deployed ? 'deployed' : ''}` },
+          h('div', { class: 'solar-wing wing-a' }), h('div', { class: 'station-truss' }), h('div', { class: 'solar-wing wing-b' }),
+          h('div', { class: 'station-spine' }, ...Array.from({ length: 5 }, (_, i) => h('i', { class: `station-module module-${i + 1}` })), h('b', {}, payload.short)),
+          h('div', { class: 'station-node node-a' }), h('div', { class: 'station-node node-b' })))
+        : h('div', { class: 'satellite-field' }, h('div', { class: `payload-object ${state.deployed ? 'deployed' : ''}` }, h('i', {}), h('b', {}, payload.short), h('i', {})));
     return panelShell('PAYLOAD OPERATIONS', state.deployed ? `${payload.name} is operational` : `Commission the ${payload.name}`,
       h('div', { class: 'payload-layout' }, op, h('section', { class: 'ops-checklist' },
         check('Separation electrical circuit', has('computer')), check('Command and telemetry link', has('comms')), check('Positive power balance', sums().power >= p.powerNeed), check('Correct payload installed', has(p.payload)),

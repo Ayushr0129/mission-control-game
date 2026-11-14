@@ -14,11 +14,14 @@ Built with TypeScript, Vite and three.js.
 ## Mission Lab controls
 
 - Assemble the vehicle by fitting and removing individual structure, propulsion, guidance, power, communications and payload components. The integration bay shows the actual stack order.
+- The assembly bay uses a blueprint-style visual parts rail and metallic vehicle silhouettes. Every fitted component changes the live wet-mass, estimated-thrust, thrust-to-weight, power, budget and delta-v readouts.
+- Parts can be dragged into any gap in the vehicle stack or dragged again to reorder them. Clicking a palette item adds another copy, so multi-tank, multi-engine and repeated-module vehicles are supported.
 - Watch budget, mass, power and delta-v continuously. Flight remains locked until every mission-critical requirement and margin is satisfied.
 - During docking, use **W/A/S/D** for RCS translation and **Q/E** for rotation. Safe capture requires range under 8 m, relative speed under 0.20 m/s and alignment under 5°. **Run guided approach** demonstrates the correct burn-and-cancel technique.
 - Use the **EN/FR** and **Light/Dark** controls on the title screen or Mission Lab toolbar. Both preferences persist locally between visits.
 - Guided approach acknowledges the command immediately, flies the rendezvous at a short training pace, and reports soft capture plus remaining RCS propellant.
 - Payload operations verify separation, telemetry, power and payload compatibility before deployment.
+- Earth and lunar relay payloads use a modular orbital-construction view with truss, pressure modules and deployable solar wings.
 - The planetary observatory uses a live three.js scene with compressed visual spacing and labelled real reference values. On a compatible HTTPS-served browser and headset, its WebXR control enters immersive VR; other browsers retain the interactive on-screen observatory.
 - Mission designs and the flight-director log persist locally in the browser. No account or network connection is required for the simulation.
 
