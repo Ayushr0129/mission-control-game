@@ -2,6 +2,16 @@
 
 The historical-campaign flight simulation uses SI units throughout: metres, seconds, kilograms, newtons, pascals and radians. The fixed integration step is **0.02 s (50 Hz)**. Rendering may run at any frame rate; elapsed frame time is accumulated and consumed in fixed physics steps.
 
+## Stage B headless ascent
+
+`src/sim/realAscent.ts` is a UI-independent deterministic ascent model. It uses a two-dimensional vertical plane embedded in the existing three-component vector type; the out-of-plane component stays zero. State is Earth-centred inertial position and velocity in SI units. The launch point co-rotates with Earth, with surface velocity computed from rotation period, radius and launch-site latitude.
+
+The integrator is fixed-step fourth-order Runge–Kutta at 0.02 seconds. Every RK4 derivative evaluates gravity, atmosphere, drag, interpolated engine performance, mass flow and body-axis thrust at its intermediate state. Propellant uses the same weighted derivative and spent-stage dry mass is dropped at separation.
+
+The headless pilot has explicit ascent, cutoff/coast and circularization phases. Rocket-specific altitude pitch programs use a closed-loop vertical-speed correction. Circularization is prograde; parking orbit is awarded only when computed periapsis is at least 150 km, apoapsis is not below periapsis and eccentricity is below 0.1.
+
+This model is not connected to the visible game in Stage B. The opt-in `?real=1` flight view belongs to Stage C.
+
 ## Constants
 
 | Constant | Value | Use | Source |
