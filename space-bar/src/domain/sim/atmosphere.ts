@@ -1,0 +1,6 @@
+import {AtmosphereLayer,CelestialBody} from './bodies';
+export interface AtmosphereSample {densityKgM3:number;pressurePa:number;temperatureK:number}
+export function atmosphereAt(body:CelestialBody,altitudeM:number):AtmosphereSample{const layers=body.atmosphere;if(!layers.length||altitudeM>=layers[layers.length-1].altitudeM)return{densityKgM3:0,pressurePa:0,temperatureK:0};const low=[...layers].reverse().find(l=>altitudeM>=l.altitudeM)??layers[0],idx=layers.indexOf(low),high=layers[Math.min(idx+1,layers.length-1)],t=high.altitudeM===low.altitudeM?0:(altitudeM-low.altitudeM)/(high.altitudeM-low.altitudeM),blend=(a:number,b:number)=>a+(b-a)*t;return{densityKgM3:Math.exp(blend(Math.log(Math.max(low.densityKgM3,1e-12)),Math.log(Math.max(high.densityKgM3,1e-12)))),pressurePa:Math.exp(blend(Math.log(Math.max(low.pressurePa,1e-9)),Math.log(Math.max(high.pressurePa,1e-9)))),temperatureK:blend(low.temperatureK,high.temperatureK)};}
+export const dynamicPressurePa=(densityKgM3:number,speedMps:number)=>.5*densityKgM3*speedMps**2;
+export const dragForceN=(densityKgM3:number,speedMps:number,dragCoefficient:number,areaM2:number)=>dynamicPressurePa(densityKgM3,speedMps)*dragCoefficient*areaM2;
+export const heatingFluxWm2=(densityKgM3:number,speedMps:number,noseRadiusM=1)=>1.83e-4*Math.sqrt(Math.max(0,densityKgM3)/noseRadiusM)*speedMps**3;
