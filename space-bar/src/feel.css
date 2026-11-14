@@ -469,3 +469,4 @@ body.launching .mute { opacity: .3; }
 .orbit-readout .scale .green { position: absolute; top: 0; bottom: 0; background: rgba(61,220,132,.55); border-left: 1px solid var(--ok); border-right: 1px solid var(--ok); }
 .orbit-readout .scale .needle { position: absolute; top: -4px; bottom: -4px; width: 3px; margin-left: -1.5px; background: #fff; box-shadow: 0 0 8px #fff; }
 .orbit-readout .speed .hint { min-height: 1.2em; }
+.global-home{position:fixed;z-index:90;left:18px;top:18px;padding:10px 14px;color:#eef6fa;background:#07131bd9;border:1px solid #7391a1;border-radius:3px;font:700 .72rem/1 var(--mono);letter-spacing:.08em;cursor:pointer;backdrop-filter:blur(8px)}.global-home:hover{color:#07131b;background:#eef6fa}@media(max-width:620px){.global-home{left:9px;top:9px;padding:9px;font-size:.62rem}}

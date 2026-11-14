@@ -70,3 +70,17 @@ Then open http://localhost:5173.
 - `src/three/`: the 3D launch pad, rocket and spacecraft, `flight.ts` (the flight you fly) and `landerview.ts` (the side view of the landing).
 - `src/ui/`: meters, sound, the flying controls (`flycontrols.ts`) and the flying overlays (`flyhud.ts`).
 - `public/textures/`: drop real NASA imagery here, credited to NASA.
+
+## Historical Campaign data
+
+Historical Campaign hardware is data-driven and runtime-validated:
+
+- `src/data/parts/index.ts` defines the discriminated part union, SI-unit fields, validation, the parts catalogue, and typed repository queries.
+- `src/data/rockets.ts` contains the five pre-built `RocketBlueprint` presets. Presets reference part IDs and are validated when the module loads.
+- `src/domain/rocket.ts` contains immutable blueprint operations, mass/thrust/TWR/delta-v calculations, and typed engineering validation. It does not import UI code.
+- `src/domain/campaign.ts` contains the forward-only campaign state machine and versioned autosave format.
+- `src/ui/historicalCampaign.ts` renders briefing, vehicle selection, encyclopedia, editor, confirmation, launch, and result screens.
+
+To add a part, add one entry to the appropriate category array in `src/data/parts/index.ts`. Supply all shared fields and the fields required by that category; startup validation and TypeScript will report missing or duplicate data. To add a rocket, add a `RocketBlueprint` to `src/data/rockets.ts` using existing part IDs. No domain or UI changes are required.
+
+The Historical Campaign is deliberately forward-only. Every irreversible transition is confirmed and autosaved. Its only exit is **Pause → Save & Quit to Main Menu**.
