@@ -1,0 +1,130 @@
+@import url('https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Michroma&display=swap');
+
+:root {
+  --lunar-body: Barlow, system-ui, sans-serif;
+  --lunar-display: Michroma, 'Century Gothic', system-ui, sans-serif;
+  --lunar-amber: #f5a524;
+}
+
+.titlescreen :is(.eyebrow, .tag.chapter, .sub, .fine) {
+  font-family: var(--lunar-body);
+}
+
+.titlescreen .slam .sub { font-style: normal; }
+.titlescreen .menu > .row > .btn {
+  font-family: var(--lunar-display);
+  font-size: clamp(.7rem, 1.1vw, .92rem);
+  letter-spacing: .08em;
+
+}
+
+@media (hover: hover) {
+  .titlescreen .menu > .row > .btn.ghost:hover { background: #362611; }
+}
+
+.titlescreen .menu > .row > .btn:focus-visible,
+.mission-lab button:focus-visible {
+  outline: 2px solid var(--lunar-amber);
+  outline-offset: 3px;
+}
+
+.mission-lab {
+  --mono: var(--lunar-body);
+  font-family: var(--lunar-body);
+}
+
+.mission-lab .panel-title h2,
+.mission-lab .lab-nav > button b,
+.mission-lab .mission-card b,
+.mission-lab .lab-button,
+.mission-lab .deploy-command {
+  font-family: var(--lunar-display);
+  font-weight: 400;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+
+.mission-lab .panel-title h2 {
+  font-size: clamp(1.25rem, 2.7vw, 2.55rem);
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.mission-lab .mission-card em,
+.mission-lab .score-card b { font-family: var(--lunar-body); }
+.mission-lab .lab-button { font-family: var(--lunar-display) !important; }
+.mission-lab .lab-nav > button b { overflow-wrap: anywhere; }
+
+body:not([data-theme="light"]) .mission-lab {
+  --lunar-line: #32383e;
+  --lunar-panel: #101215;
+  --lunar-muted: #a3adb7;
+  color: #e8edf2;
+  background: radial-gradient(ellipse at top right, #252931, transparent 55%), #090a0c;
+}
+
+body:not([data-theme="light"]) .mission-lab :is(
+  .lab-nav, .lab-topbar, .resource, .mission-card, .lesson-strip,
+  .parts-console, .engineering-console, .parts-console-head, .engineering-title,
+  .flight-status, .rcs-controls, .ops-checklist, .planet-facts,
+  .score-card, .report-card, .learning-log
+) {
+  background: var(--lunar-panel);
+  border-color: var(--lunar-line);
+}
+
+body:not([data-theme="light"]) .mission-lab :is(
+  .lab-nav > button, .lab-lede, .lab-topbar span, .resource > span,
+  .mission-card small, .mission-card em, .lesson-strip p, .engineering-console dt,
+  .sim-lock p, .flight-status span, .report-card dt, .score-card small
+) { color: var(--lunar-muted); }
+
+body:not([data-theme="light"]) .mission-lab .lab-nav > button {
+  border-bottom: 1px solid var(--lunar-line);
+}
+
+body:not([data-theme="light"]) .mission-lab :is(
+  .lab-nav > button.active, .mission-card.selected, .mission-card:hover
+) {
+  color: #fff;
+  background: #191713;
+  border-color: var(--lunar-amber);
+}
+
+body:not([data-theme="light"]) .mission-lab :is(
+  .lab-nav > button.active span, .panel-title p, .lesson-strip > span
+) { color: var(--lunar-amber); }
+
+body:not([data-theme="light"]) .mission-lab .lab-button {
+  background: #101215;
+  border-color: #565d65;
+}
+
+body:not([data-theme="light"]) .mission-lab :is(.lab-button.primary, .deploy-command) {
+  color: #161009;
+  background: var(--lunar-amber);
+  border-color: var(--lunar-amber);
+}
+
+body:not([data-theme="light"]) .mission-lab :is(.lab-button.primary, .deploy-command):hover:not(:disabled) {
+  color: #161009;
+  background: #ffc36a;
+}
+
+@media (hover: hover) {
+  :is(button, [role="button"], input[type="button"], input[type="submit"], input[type="reset"]):hover:not(:disabled, [aria-disabled="true"]) {
+    filter: brightness(1.18) drop-shadow(0 0 7px #f5a52480);
+  }
+}
+
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  :is(button, [role="button"], input[type="button"], input[type="submit"], input[type="reset"]):hover:not(:active, :disabled, [aria-disabled="true"]) {
+    translate: 0 -2px;
+    scale: 1.025;
+    animation: button-hover-pop .16s ease-out;
+  }
+}
+
+@keyframes button-hover-pop {
+  from { translate: 0 0; scale: 1; }
+}
