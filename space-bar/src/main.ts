@@ -15,6 +15,7 @@ import { liftoffSetup, startAscent, stepAscent, ascentPilot, ascentDone, gradeAs
 import { landingSetup } from './sim/landing';
 import { siteOverloadsLink } from './sim/simulate';
 import { missionLab, preferenceControls, uiText } from './missionlab';
+import './lunar.css';
 import {
   Session, newSession, answer, totalsFor, warningsFor, finishFlight, retry,
   clearLessons, encodeShare, decodeShare, addToBoard, board, daysLeft, survival,
