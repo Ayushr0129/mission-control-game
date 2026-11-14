@@ -17,6 +17,7 @@ import { landingSetup } from './sim/landing';
 import { siteOverloadsLink } from './sim/simulate';
 import { missionLab, preferenceControls, uiText } from './missionlab';
 import { historicalCampaign } from './ui/historicalCampaign';
+import { SIMULATION_SOURCES } from './data/sources';
 import {
   Session, newSession, answer, totalsFor, warningsFor, finishFlight, retry,
   clearLessons, encodeShare, decodeShare, addToBoard, board, daysLeft, survival,
@@ -201,7 +202,8 @@ function dataScreen() {
     h('p', { class: 'lede' }, 'All data ships as static files inside the game. Nothing is fetched at play time. Items marked placeholder were entered from public knowledge and will be checked against the official challenge resources. The crew and the people you speak to are fictional.'),
     h('div', { class: 'table', role: 'table' }, ...rows.map((r) => h('div', { class: 'trow', role: 'row' },
       h('b', {}, r[0]), h('span', {}, r[1]), h('em', { class: `badge ${r[2]}` }, r[2]), h('span', { class: 'dim' }, r[3])))),
-    h('p', { class: 'fine' }, 'Imagery: Earth and Moon are procedural placeholders. Real NASA imagery goes in public/textures/ and must be credited to NASA.'),
+    h('section',{class:'simulation-credits'},h('p',{class:'eyebrow'},'SIMULATOR SOURCES & CREDITS'),h('h3',{},'Where the numbers come from'),h('p',{},'These sources support the vehicle proportions, planetary constants, atmosphere and learning explanations used by the simulator.'),h('div',{class:'source-cards'},...SIMULATION_SOURCES.map(source=>h('article',{},h('b',{},source.subject),h('a',{href:source.url,target:'_blank',rel:'noreferrer'},`${source.publisher} · ${source.title}`),h('span',{},source.usedFor))))),
+    h('p', { class: 'fine' }, 'Visuals are original code-generated diagrams based on published dimensions. Earth and Moon imagery is procedural. NASA material is credited to NASA; SpaceX names and vehicle data are credited to SpaceX.'),
     btn('Back', () => go('title')));
 }
 
