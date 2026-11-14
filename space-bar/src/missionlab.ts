@@ -401,7 +401,7 @@ export function missionLab(onBack: () => void): HTMLElement {
         h('section', { class: 'report-card' }, h('h3', {}, p.name), h('p', {}, p.science),
           h('dl', {}, h('dt', {}, 'Vehicle'), h('dd', {}, `${chosen().length} components · ${fmt(t.mass, 2)} t`), h('dt', {}, 'Cost'), h('dd', {}, `$${fmt(t.cost, 1)}M of $${p.budget}M`), h('dt', {}, 'Payload'), h('dd', {}, state.deployed ? 'Deployed and commissioned' : 'Not commissioned'), h('dt', {}, 'Docking'), h('dd', {}, state.notes.some((n) => n.includes('Docking')) ? 'Soft capture confirmed' : 'Training incomplete'))),
         h('section', { class: 'learning-log' }, h('h3', {}, 'Flight director log'), ...(state.notes.length ? state.notes.slice(-5).map((n) => h('p', {}, n)) : [h('p', { class: 'dim' }, 'Complete flight and payload operations to build the evidence log.')]))),
-      h('div', { class: 'lab-actions' }, labButton('Revise the design', () => changeTab('vehicle')), labButton('Start a new mission', () => { state = { profileId: 'moon', partIds: [...starter], deployed: false, samples: 0, notes: [] }; saveState(); changeTab('brief'); }, true)));
+      h('div', { class: 'lab-actions' }, labButton('Revise the design', () => changeTab('vehicle')), labButton('Start a new mission', () => { state = { profileId: 'moon', partIds: [...starter], placements: defaultPlacements(starter), symmetry: false, deployed: false, samples: 0, notes: [] }; saveState(); changeTab('brief'); }, true)));
   }
 
   root.append(nav, h('section', { class: 'lab-workspace' }, h('header', { class: 'lab-topbar' },

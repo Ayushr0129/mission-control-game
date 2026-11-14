@@ -8,6 +8,7 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "test": "vitest run",
+    "lint": "tsc --noEmit",
     "balance": "vitest run tests/balance.test.ts --reporter=verbose",
     "e2e": "node scripts/e2e.cjs"
   },

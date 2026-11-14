@@ -15,6 +15,7 @@ import { liftoffSetup, startAscent, stepAscent, ascentPilot, ascentDone, gradeAs
 import { landingSetup } from './sim/landing';
 import { siteOverloadsLink } from './sim/simulate';
 import { missionLab, preferenceControls, uiText } from './missionlab';
+import { historicalCampaign } from './ui/historicalCampaign';
 import {
   Session, newSession, answer, totalsFor, warningsFor, finishFlight, retry,
   clearLessons, encodeShare, decodeShare, addToBoard, board, daysLeft, survival,
@@ -32,7 +33,7 @@ const roleOwns: Record<Role | 'crew', string> = {
   engineer: 'The spacecraft: strength, reliability, mass and power', scientist: 'What the mission does on arrival', crew: 'Decisions everyone shares',
 };
 
-type Screen = 'gate' | 'title' | 'brief' | 'scene' | 'news' | 'build' | 'poll' | 'paper' | 'report' | 'collapse' | 'done' | 'data' | 'shared' | 'lab';
+type Screen = 'gate' | 'title' | 'campaign' | 'brief' | 'scene' | 'news' | 'build' | 'poll' | 'paper' | 'report' | 'collapse' | 'done' | 'data' | 'shared' | 'lab';
 type Item = { t: 'scene'; qid: string } | { t: 'news'; ev: GameEvent };
 
 const qs = new URLSearchParams(location.search);
@@ -76,9 +77,9 @@ function render() {
   else bd.showWorld();
   document.body.dataset.screen = screen;
   app.replaceChildren();
-  const view = ({ gate, title, brief, scene, news, build, poll, paper, report, collapse, done, data: dataScreen, shared, lab: () => missionLab(() => go('title')) } as Record<Screen, () => HTMLElement>)[screen]();
+  const view = ({ gate, title, campaign: () => historicalCampaign(() => go('title')), brief, scene, news, build, poll, paper, report, collapse, done, data: dataScreen, shared, lab: () => missionLab(() => go('title')) } as Record<Screen, () => HTMLElement>)[screen]();
   app.append(view);
-  if (!['gate', 'title', 'lab'].includes(screen)) app.append(h('button', { type: 'button', class: 'global-home', onclick: () => go('title'), 'aria-label': uiText('Back to start page', "Retour à la page d'accueil") }, `⌂ ${uiText('Start', 'Accueil')}`));
+  if (!['gate', 'title', 'lab', 'campaign'].includes(screen)) app.append(h('button', { type: 'button', class: 'global-home', onclick: () => go('title'), 'aria-label': uiText('Back to start page', "Retour à la page d'accueil") }, `⌂ ${uiText('Start', 'Accueil')}`));
   (app.querySelector('h1,h2') as HTMLElement | null)?.focus?.({ preventScroll: true });
 }
 
@@ -155,7 +156,7 @@ function title() {
     h('p', { class: 'tag chapter' }, h('i', {}), uiText(`Chapter ${chapter.id}: ${chapter.title}`, `Chapitre ${chapter.id} : Course vers la Lune`), h('i', {})),
     h('p', { class: 'sub' }, uiText('Three people will climb into a machine you designed.', 'Trois personnes monteront dans une machine que vous avez conçue.')));
   const menu = h('div', { class: 'menu', hidden: playing },
-    h('div', { class: 'row' }, btn(uiText('Open Mission Lab'), () => { sfx.ambient(true); go('lab'); }, 'btn primary big'), btn(uiText('Play historical campaign'), () => { sfx.ambient(true); go('brief'); }, 'btn ghost'), btn(uiText('Data and sources'), () => go('data'), 'btn ghost')),
+    h('div', { class: 'row' }, btn(uiText('Open Mission Lab'), () => { sfx.ambient(true); go('lab'); }, 'btn primary big'), btn(uiText('Play historical campaign'), () => { sfx.ambient(true); go('campaign'); }, 'btn ghost'), btn(uiText('Data and sources'), () => go('data'), 'btn ghost')),
     h('p', { class: 'fine' }, uiText('Engineer a complete mission, assemble the vehicle piece by piece, fly an RCS rendezvous, dock and deploy a scientific payload—or enter the historical Moon-race campaign.')),
     preferenceControls(refreshPreferenceUi, 'title-preferences'),
     (lessons > 0 || fallen.length > 0) && h('p', { class: 'fine' },
