@@ -48,6 +48,8 @@ const bd = new Backdrop(document.body);
 let introSeen = (() => { try { return sessionStorage.getItem('rttm.intro') === '1' && !qs.has('intro'); } catch { return false; } })();
 let cut: Flight | null = null;
 let timers: number[] = [];
+/** removes the intro's skip keys (Escape, Space, Enter); set only while the intro is playing */
+let stopIntroKeys: (() => void) | null = null;
 let sharedView = location.hash.startsWith('#r=') ? decodeShare(location.hash.slice(3)) : null;
 if (sharedView) screen = 'shared'; else if (introSeen || qs.has('quick')) { screen = 'title'; introSeen = true; }
 
@@ -68,6 +70,7 @@ function later(fn: () => void, ms: number) { const id = window.setTimeout(fn, ms
 
 function render() {
   timers.forEach((id) => clearTimeout(id)); timers = [];
+  stopIntroKeys?.();
   document.body.classList.remove('launching');
   if (screen === 'scene' || screen === 'build' || screen === 'poll') { /* these set the build site themselves */ }
   else if (screen === 'brief') bd.showSite(null, 0);
@@ -175,13 +178,15 @@ function title() {
       line.replaceChildren(); flash.classList.remove('on'); flash.classList.add('off'); skip.remove();
       slam.hidden = false; slam.classList.add('in'); sfx.thud(); sfx.stinger('win');
       introSeen = true; try { sessionStorage.setItem('rttm.intro', '1'); } catch { /* ignore */ }
+      stopIntroKeys?.(); // the intro is over: Enter and Space belong to the buttons again
     }
     else if (c === 'menu') { menu.hidden = false; menu.classList.add('in'); (menu.querySelector('.btn.primary') as HTMLElement | null)?.focus({ preventScroll: true }); }
   };
   if (playing) {
     bd.playIntro(cue);
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' || e.key === ' ' || e.key === 'Enter') { e.preventDefault(); bd.skipIntro(); } };
-    addEventListener('keydown', onKey); later(() => removeEventListener('keydown', onKey), 20000);
+    addEventListener('keydown', onKey);
+    stopIntroKeys = () => { removeEventListener('keydown', onKey); stopIntroKeys = null; };
   } else { slam.classList.add('in'); menu.classList.add('in'); }
   return h('main', { class: 'screen titlescreen' }, line, slam, menu, playing && skip, flash);
 }

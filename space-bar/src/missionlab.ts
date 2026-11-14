@@ -2,19 +2,14 @@ import './missionlab.css';
 import * as THREE from 'three';
 import { VRButton } from 'three/examples/jsm/webxr/VRButton.js';
 import { h, fmt } from './ui/dom';
+import { performanceOf } from './lab/physics';
+import { launchSetupOf } from './lab/launch';
+import { LaunchView, LaunchResult, metText } from './lab/launchview';
+import { Category, Part, parts, profiles, starter, partsOf, sumsOf, readinessOf, MIN_LIFTOFF_TWR, payloadPartId as payloadOf, baselineFor as baselineOf, scoreMission, launchMeetsMission, DockingResult, ScorePart } from './lab/catalog';
 
 type Tab = 'brief' | 'vehicle' | 'flight' | 'payload' | 'observatory' | 'debrief';
 type Language = 'en' | 'fr';
 type Theme = 'dark' | 'light';
-type Category = 'Propulsion' | 'Structure' | 'Guidance' | 'Power' | 'Communications' | 'Payload';
-type Part = {
-  id: string; category: Category; name: string; short: string; mass: number; cost: number;
-  power: number; deltaV: number; tags: string[]; note: string;
-};
-type Profile = {
-  id: string; name: string; destination: string; budget: number; massCap: number; powerNeed: number;
-  deltaVNeed: number; payload: string; science: string; accent: string;
-};
 
 interface Preferences { language: Language; theme: Theme }
 const PREF_KEY = 'spacebar.preferences.v1';
@@ -73,7 +68,9 @@ const FR: Record<string, string> = {
   'Load engineering baseline': 'Charger la configuration de référence', 'Proceed to flight': 'Passer au vol',
   'Select components to begin assembly': "Sélectionnez des composants pour commencer l'assemblage",
   'PARTS': 'PIÈCES', 'BUILD MODE': 'MODE ASSEMBLAGE', 'FLIGHT ENGINEERING': 'INGÉNIERIE DE VOL',
-  'Estimated thrust': 'Poussée estimée', 'Thrust / weight': 'Poussée / poids', 'Propulsive stages': 'Étages propulsifs',
+  'Liftoff thrust / weight': 'Poussée / poids au décollage', 'Stack Δv': 'Δv du lanceur', 'Propulsive stages': 'Étages propulsifs', 'liftoff thrust': 'poussée au décollage',
+  'Each engine burns the tanks stacked above it, up to the next engine. Spent stages drop away, so the order of the stack decides the delta-v.': "Chaque moteur brûle les réservoirs empilés au-dessus de lui, jusqu'au moteur suivant. Les étages vides sont largués : l'ordre de l'empilement décide du delta-v.",
+  'The rocket equation': "L'équation de la fusée", 'Delta-v grows with engine efficiency and with the ratio of full to empty mass, but only logarithmically. That is why rockets stage: dropping empty tanks makes every remaining kilogram of propellant count for more.': "Le delta-v croît avec le rendement du moteur et avec le rapport entre masse pleine et masse vide, mais seulement de façon logarithmique. C'est pourquoi les fusées ont des étages : larguer les réservoirs vides rend chaque kilogramme d'ergol restant plus utile.",
   'Click a component to fit or remove it. Select a fitted stage in the vehicle to inspect or remove it.': "Cliquez sur un composant pour l'installer ou le retirer. Sélectionnez un étage du véhicule pour l'inspecter ou le retirer.",
   'LAUNCH VEHICLE CONFIGURATION': 'CONFIGURATION DU LANCEUR', 'FITTED': 'INSTALLÉ', 'AVAILABLE': 'DISPONIBLE',
   'DRAG PARTS INTO THE STACK · CLICK TO ADD ANOTHER': 'GLISSEZ LES PIÈCES DANS LA FUSÉE · CLIQUEZ POUR EN AJOUTER',
@@ -88,6 +85,7 @@ const FR: Record<string, string> = {
   'VEHICLE NOT READY': 'VÉHICULE NON PRÊT', 'The simulator uses the vehicle you actually assemble. Close every red margin before committing the crew and payload.': "Le simulateur utilise le véhicule réellement assemblé. Résolvez chaque marge rouge avant d'engager l'équipage et la charge utile.",
   'SOFT CAPTURE CONFIRMED': 'CAPTURE SOUPLE CONFIRMÉE', 'PAYLOAD OPERATIONS': 'OPÉRATIONS DE CHARGE UTILE',
   'GUIDANCE ACTIVE': 'GUIDAGE ACTIF', 'propulsion': 'propulsion', 'propellant tank': "réservoir d'ergols", 'flight computer': 'ordinateur de vol', 'power source': "source d'énergie", 'communications': 'communications', 'satellite payload': 'charge utile satellite', 'rover payload': 'charge utile rover', 'probe payload': 'charge utile sonde', 'budget margin': 'marge budgétaire', 'launch mass margin': 'marge de masse au lancement', 'power margin': 'marge de puissance', 'delta-v margin': 'marge de delta-v',
+  'Vehicle changed: launch, docking and payload results cleared.': 'Véhicule modifié : résultats du lancement, de l’amarrage et de la charge utile effacés.',
   'Separation electrical circuit': 'Circuit électrique de séparation', 'Command and telemetry link': 'Liaison de commande et télémétrie', 'Positive power balance': 'Bilan de puissance positif', 'Correct payload installed': 'Charge utile correcte installée',
   'DEPLOYMENT COMPLETE': 'DÉPLOIEMENT TERMINÉ', 'ARM + DEPLOY': 'ARMER + DÉPLOYER', 'Commissioning is part of the mission': 'La mise en service fait partie de la mission',
   'Arrival is not success. A payload must separate safely, establish attitude, generate power, acquire a communications link and return scientifically useful data.': "Arriver ne suffit pas. Une charge utile doit se séparer sans danger, établir son attitude, produire de l'énergie, acquérir une liaison et renvoyer des données scientifiquement utiles.",
@@ -140,33 +138,6 @@ function localizeTree(root: ParentNode) {
 }
 applyPreferenceDocument();
 
-const profiles: Profile[] = [
-  { id: 'earth', name: 'Earth Climate Watch', destination: 'Sun-synchronous orbit · 705 km', budget: 168, massCap: 58, powerNeed: 3.2, deltaVNeed: 9.5, payload: 'satellite', science: 'Map sea level, aerosols and vegetation every 16 days.', accent: '#73b9ff' },
-  { id: 'moon', name: 'Lunar Far-Side Relay', destination: 'Elliptical lunar orbit · 100 × 3,000 km', budget: 228, massCap: 64, powerNeed: 4.8, deltaVNeed: 12.4, payload: 'satellite', science: 'Relay data from the radio-quiet far side of the Moon.', accent: '#d7dce4' },
-  { id: 'mars', name: 'Mars Sample Scout', destination: 'Jezero region · 18.4°N, 77.6°E', budget: 486, massCap: 72, powerNeed: 4.1, deltaVNeed: 14.7, payload: 'rover', science: 'Cache cores from an ancient river delta for later return.', accent: '#e1835c' },
-  { id: 'saturn', name: 'Saturn Ring Surveyor', destination: 'Saturn polar orbit · ring plane crossings', budget: 740, massCap: 88, powerNeed: 3.4, deltaVNeed: 17.2, payload: 'probe', science: 'Measure ring particles, shepherd moons and magnetosphere.', accent: '#e7c98a' },
-];
-
-const parts: Part[] = [
-  { id: 'fairing', category: 'Structure', name: 'Payload fairing', short: 'FAIRING', mass: 1.4, cost: 5.5, power: 0, deltaV: 0, tags: ['fairing'], note: 'Protects the payload through max-Q and is discarded above the sensible atmosphere.' },
-  { id: 'adapter', category: 'Structure', name: 'Docking adapter', short: 'DOCK', mass: 0.42, cost: 8.2, power: -0.18, deltaV: 0, tags: ['dock'], note: 'Androgynous capture ring, range sensors and soft-capture latches.' },
-  { id: 'tank', category: 'Propulsion', name: 'Cryogenic propellant tank', short: 'LOX / LH₂', mass: 11.8, cost: 18, power: 0, deltaV: 3.7, tags: ['tank'], note: 'High-energy upper-stage propellant. Adds range, but boil-off limits coast time.' },
-  { id: 'booster', category: 'Propulsion', name: 'Reusable booster core', short: 'BOOSTER', mass: 19.6, cost: 42, power: 0, deltaV: 5.6, tags: ['engine', 'booster'], note: 'Nine throttleable engines provide pad thrust and recovery reserve.' },
-  { id: 'vac', category: 'Propulsion', name: 'Vacuum transfer engine', short: 'VAC ENGINE', mass: 2.2, cost: 17.5, power: 0, deltaV: 2.8, tags: ['engine'], note: 'Expanding nozzle optimized for orbital insertion and departure burns.' },
-  { id: 'kick', category: 'Propulsion', name: 'Storable-propellant kick stage', short: 'KICK STAGE', mass: 3.8, cost: 13.6, power: 0, deltaV: 2.7, tags: ['engine'], note: 'A restartable stage for high-energy departure and planetary capture.' },
-  { id: 'ion', category: 'Propulsion', name: 'Solar-electric cruise drive', short: 'ION DRIVE', mass: 0.92, cost: 31, power: -2.4, deltaV: 5.6, tags: ['engine', 'deep-space'], note: 'Very low thrust over months produces exceptional deep-space delta-v.' },
-  { id: 'rcs', category: 'Guidance', name: '16-thruster RCS quad set', short: 'RCS ×16', mass: 0.68, cost: 12.4, power: -0.28, deltaV: 0.55, tags: ['rcs'], note: 'Translation and rotation jets for proximity operations and docking.' },
-  { id: 'computer', category: 'Guidance', name: 'Triple-redundant flight computer', short: 'GNC', mass: 0.19, cost: 15.8, power: -0.32, deltaV: 0, tags: ['computer'], note: 'Fuses star tracker, inertial and radar data; survives one computer failure.' },
-  { id: 'wheels', category: 'Guidance', name: 'Reaction-wheel assembly', short: 'RW ×4', mass: 0.31, cost: 6.4, power: -0.48, deltaV: 0, tags: ['attitude'], note: 'Fine pointing without spending propellant; RCS unloads stored momentum.' },
-  { id: 'solar', category: 'Power', name: 'Deployable solar wings', short: 'SOLAR 7.6 kW', mass: 1.8, cost: 14.2, power: 7.6, deltaV: 0, tags: ['power'], note: 'Two articulated arrays sized at 1 AU. Output falls with distance from the Sun.' },
-  { id: 'rtg', category: 'Power', name: 'Radioisotope power unit', short: 'RTG 1.2 kW', mass: 0.57, cost: 34, power: 1.2, deltaV: 0, tags: ['power', 'deep-space'], note: 'Continuous deep-space power independent of sunlight; high programme cost.' },
-  { id: 'reactor', category: 'Power', name: 'Compact fission reactor', short: 'FISSION 5.5 kW', mass: 1.9, cost: 95, power: 5.5, deltaV: 0, tags: ['power', 'deep-space'], note: 'High, steady output for electric propulsion beyond the useful range of solar arrays.' },
-  { id: 'battery', category: 'Power', name: 'Lithium-ion battery bank', short: 'BATTERY', mass: 0.44, cost: 4.8, power: 0.9, deltaV: 0, tags: ['battery'], note: 'Buffers eclipse, peak transmitter loads and rover deployment.' },
-  { id: 'dish', category: 'Communications', name: 'High-gain steerable dish', short: 'X / Ka BAND', mass: 0.76, cost: 11.7, power: -0.72, deltaV: 0, tags: ['comms'], note: 'High-rate science downlink. Pointing accuracy is part of the link budget.' },
-  { id: 'sat', category: 'Payload', name: 'Modular relay satellite', short: 'RELAY SAT', mass: 1.35, cost: 24, power: -1.6, deltaV: 0, tags: ['payload', 'satellite'], note: 'Optical crosslinks, X-band relay and a 5-year radiation design life.' },
-  { id: 'rover', category: 'Payload', name: 'Autonomous geology rover', short: 'ROVER', mass: 1.92, cost: 58, power: -2.2, deltaV: 0, tags: ['payload', 'rover'], note: 'Six-wheel rocker-bogie chassis with coring drill and sample cache.' },
-  { id: 'probe', category: 'Payload', name: 'Ring-plane science probe', short: 'RING PROBE', mass: 2.46, cost: 76, power: -2.8, deltaV: 0, tags: ['payload', 'probe'], note: 'Dust analyzer, magnetometer, wide-angle imager and armored electronics.' },
-];
 
 const tabMeta: { id: Tab; no: string; label: string }[] = [
   { id: 'brief', no: '01', label: 'Mission brief' }, { id: 'vehicle', no: '02', label: 'Vehicle assembly' },
@@ -174,36 +145,31 @@ const tabMeta: { id: Tab; no: string; label: string }[] = [
   { id: 'observatory', no: '05', label: 'Planetary observatory' }, { id: 'debrief', no: '06', label: 'Mission debrief' },
 ];
 
-interface LabState { profileId: string; partIds: string[]; deployed: boolean; samples: number; notes: string[] }
-const starter = ['booster', 'tank', 'vac', 'computer', 'rcs', 'wheels', 'solar', 'battery', 'dish', 'adapter', 'fairing'];
+interface LabState { profileId: string; partIds: string[]; deployed: boolean; samples: number; notes: string[]; launch: LaunchResult | null; docking: DockingResult | null }
 let state: LabState = loadState();
 let lastTab: Tab = 'brief';
 
 function loadState(): LabState {
   try {
     const raw = localStorage.getItem('spacebar.missionlab.v1');
-    if (raw) return { profileId: 'moon', partIds: [...starter], deployed: false, samples: 0, notes: [], ...JSON.parse(raw) };
+    if (raw) return { profileId: 'moon', partIds: [...starter], deployed: false, samples: 0, notes: [], launch: null, docking: null, ...JSON.parse(raw) };
   } catch { /* local storage is optional */ }
-  return { profileId: 'moon', partIds: [...starter], deployed: false, samples: 0, notes: [] };
+  return { profileId: 'moon', partIds: [...starter], deployed: false, samples: 0, notes: [], launch: null, docking: null };
 }
 function saveState() { try { localStorage.setItem('spacebar.missionlab.v1', JSON.stringify(state)); } catch { /* optional */ } }
-const profile = () => profiles.find((p) => p.id === state.profileId) ?? profiles[1];
-const payloadPartId = (p = profile()) => p.payload === 'satellite' ? 'sat' : p.payload;
-const baselineFor = (p = profile()) => {
-  const core = starter.filter((id) => id !== 'fairing' && (p.id !== 'earth' || (id !== 'adapter' && id !== 'wheels')));
-  return [...core, payloadPartId(p), 'fairing'];
-};
-const chosen = () => state.partIds.map((id) => parts.find((p) => p.id === id)).filter((p): p is Part => !!p);
-const sums = () => chosen().reduce((a, p) => ({ mass: a.mass + p.mass, cost: a.cost + p.cost, power: a.power + p.power, deltaV: a.deltaV + p.deltaV }), { mass: 0, cost: 0, power: 0, deltaV: 0 });
-const has = (tag: string) => chosen().some((p) => p.tags.includes(tag));
-function readiness() {
-  const p = profile(), t = sums(), missing: string[] = [];
-  if (!has('engine')) missing.push('propulsion'); if (!has('tank')) missing.push('propellant tank'); if (!has('computer')) missing.push('flight computer');
-  if (!has('rcs')) missing.push('RCS'); if (!has('power')) missing.push('power source'); if (!has('comms')) missing.push('communications');
-  if (!has(p.payload)) missing.push(`${p.payload} payload`); if (t.cost > p.budget) missing.push('budget margin');
-  if (t.mass > p.massCap) missing.push('launch mass margin'); if (t.power < p.powerNeed) missing.push('power margin'); if (t.deltaV < p.deltaVNeed) missing.push('delta-v margin');
-  return missing;
+/** A changed vehicle voids what the old one flew: the launch, the docking and the deployment have to be flown again. */
+function designChanged() {
+  if (!state.launch && !state.docking && !state.deployed) return;
+  state.launch = null; state.docking = null; state.deployed = false;
+  state.notes.push('Vehicle changed: launch, docking and payload results cleared.');
 }
+const profile = () => profiles.find((p) => p.id === state.profileId) ?? profiles[1];
+const payloadPartId = (p = profile()) => payloadOf(p);
+const baselineFor = (p = profile()) => baselineOf(p);
+const chosen = () => partsOf(state.partIds);
+const sums = () => sumsOf(state.partIds, profile());
+const has = (tag: string) => chosen().some((p) => p.tags.includes(tag));
+const readiness = () => readinessOf(profile(), state.partIds);
 
 export function missionLab(onBack: () => void): HTMLElement {
   let active: Tab = lastTab;
@@ -228,18 +194,26 @@ export function missionLab(onBack: () => void): HTMLElement {
     ...tabMeta.map((t) => h('button', { type: 'button', 'data-tab': t.id, onclick: () => changeTab(t.id) }, h('span', {}, t.no), h('b', {}, t.label))),
     h('button', { type: 'button', class: 'lab-exit', onclick: onBack }, '← Historical campaign'));
   function renderPanel() {
-    nav.querySelectorAll('[data-tab]').forEach((el) => el.classList.toggle('active', (el as HTMLElement).dataset.tab === active));
+    renderNavLocks();
     renderResources();
     const panel = ({ brief: briefPanel, vehicle: vehiclePanel, flight: flightPanel, payload: payloadPanel, observatory: observatoryPanel, debrief: debriefPanel } as Record<Tab, () => HTMLElement>)[active]();
     content.replaceChildren(panel);
     localizeTree(root);
+  }
+  function renderNavLocks() {
+    nav.querySelectorAll('[data-tab]').forEach((el) => {
+      const tab = (el as HTMLElement).dataset.tab, locked = tab === 'payload' && !state.docking;
+      el.classList.toggle('active', tab === active); el.classList.toggle('locked', locked);
+      (el as HTMLButtonElement).disabled = locked;
+      if (locked) el.setAttribute('title', uiText('Dock with the target first', "Amarrez-vous d'abord à la cible")); else el.removeAttribute('title');
+    });
   }
   function changeTab(next: Tab) { active = next; lastTab = next; renderPanel(); window.scrollTo(0, 0); }
 
   function briefPanel() {
     const p = profile();
     const cards = profiles.map((m) => h('button', { class: `mission-card ${m.id === p.id ? 'selected' : ''}`, type: 'button', onclick: () => {
-      state.profileId = m.id; state.deployed = false; state.samples = 0; saveState(); renderPanel();
+      state.profileId = m.id; state.deployed = false; state.samples = 0; state.launch = null; state.docking = null; saveState(); renderPanel();
     } }, h('span', { class: 'mission-orbit' }, m.id === 'earth' ? '◉' : m.id === 'moon' ? '◐' : m.id === 'mars' ? '●' : '⊚'),
     h('span', {}, h('small', {}, m.destination), h('b', {}, m.name), h('em', {}, m.science)), h('strong', {}, `$${m.budget}M`)));
     return panelShell('MISSION ARCHITECTURE', 'Choose what the mission must accomplish',
@@ -254,9 +228,9 @@ export function missionLab(onBack: () => void): HTMLElement {
     const dragType = 'application/x-spacebar-part';
     const addPart = (p: Part, at = state.partIds.length) => {
       state.partIds.splice(Math.max(0, Math.min(at, state.partIds.length)), 0, p.id);
-      saveState(); renderPanel();
+      designChanged(); saveState(); renderPanel();
     };
-    const removePart = (index: number) => { state.partIds.splice(index, 1); saveState(); renderPanel(); };
+    const removePart = (index: number) => { state.partIds.splice(index, 1); designChanged(); saveState(); renderPanel(); };
     const startDrag = (ev: DragEvent, partId: string, sourceIndex?: number) => {
       const data = JSON.stringify({ partId, sourceIndex });
       ev.dataTransfer?.setData(dragType, data); ev.dataTransfer?.setData('text/plain', data);
@@ -276,7 +250,7 @@ export function missionLab(onBack: () => void): HTMLElement {
           state.partIds.splice(data.sourceIndex, 1);
         }
         state.partIds.splice(Math.max(0, Math.min(target, state.partIds.length)), 0, data.partId);
-        saveState(); renderPanel();
+        designChanged(); saveState(); renderPanel();
       } finally { finishDrag(); }
     };
     const catalogue = h('aside', { class: 'parts-console', 'aria-label': 'Spacecraft parts' },
@@ -292,7 +266,7 @@ export function missionLab(onBack: () => void): HTMLElement {
     const entries = state.partIds.map((id, index) => ({ part: parts.find((p) => p.id === id), index })).filter((entry): entry is { part: Part; index: number } => !!entry.part).reverse();
     const dropZone = (visualGap: number) => {
       const insertion = state.partIds.length - visualGap;
-      return h('div', { class: 'stack-drop-zone', ondragover: (ev: DragEvent) => { ev.preventDefault(); if (ev.dataTransfer) ev.dataTransfer.dropEffect = 'move'; }, ondragenter: (ev: DragEvent) => (ev.currentTarget as HTMLElement).classList.add('active'), ondragleave: (ev: DragEvent) => (ev.currentTarget as HTMLElement).classList.remove('active'), ondrop: (ev: DragEvent) => dropPart(ev, insertion) }, h('span', {}, 'DROP HERE'));
+      return h('div', { class: 'stack-drop-zone', ondragover: (ev: DragEvent) => { ev.preventDefault(); if (ev.dataTransfer) ev.dataTransfer.dropEffect = ev.dataTransfer.effectAllowed === 'copy' ? 'copy' : 'move'; }, ondragenter: (ev: DragEvent) => (ev.currentTarget as HTMLElement).classList.add('active'), ondragleave: (ev: DragEvent) => (ev.currentTarget as HTMLElement).classList.remove('active'), ondrop: (ev: DragEvent) => dropPart(ev, insertion) }, h('span', {}, 'DROP HERE'));
     };
     const stackNodes: HTMLElement[] = [dropZone(0)];
     entries.forEach(({ part: p, index }, visualIndex) => {
@@ -300,8 +274,8 @@ export function missionLab(onBack: () => void): HTMLElement {
         h('div', { class: `stack-part-body render-${p.id}`, draggable: 'true', title: p.note, role: 'button', tabindex: '0', 'aria-label': `Move ${p.name}`, ondragstart: (ev: DragEvent) => startDrag(ev, p.id, index), ondragend: finishDrag }, h('span', {}, p.short)),
         h('div', { class: 'stack-callout' }, h('b', {}, p.name), h('small', {}, `${p.mass} t · $${p.cost}M`),
           h('span', {},
-            h('button', { type: 'button', 'aria-label': `Move ${p.name} up`, onclick: () => { if (index < state.partIds.length - 1) [state.partIds[index + 1], state.partIds[index]] = [state.partIds[index], state.partIds[index + 1]]; saveState(); renderPanel(); } }, '↑'),
-            h('button', { type: 'button', 'aria-label': `Move ${p.name} down`, onclick: () => { if (index > 0) [state.partIds[index - 1], state.partIds[index]] = [state.partIds[index], state.partIds[index - 1]]; saveState(); renderPanel(); } }, '↓'),
+            h('button', { type: 'button', 'aria-label': `Move ${p.name} up`, onclick: () => { if (index < state.partIds.length - 1) [state.partIds[index + 1], state.partIds[index]] = [state.partIds[index], state.partIds[index + 1]]; designChanged(); saveState(); renderPanel(); } }, '↑'),
+            h('button', { type: 'button', 'aria-label': `Move ${p.name} down`, onclick: () => { if (index > 0) [state.partIds[index - 1], state.partIds[index]] = [state.partIds[index], state.partIds[index - 1]]; designChanged(); saveState(); renderPanel(); } }, '↓'),
             h('button', { type: 'button', 'aria-label': `Remove ${p.name}`, onclick: () => removePart(index) }, '×')))));
       stackNodes.push(dropZone(visualIndex + 1));
     });
@@ -309,25 +283,70 @@ export function missionLab(onBack: () => void): HTMLElement {
       h('div', { class: 'stack-axis' }),
       ...(entries.length ? stackNodes : [dropZone(0), h('div', { class: 'empty-stack' }, 'Select components to begin assembly')]));
     const missing = readiness();
-    const total = sums();
-    const thrust = chosen().reduce((sum, p) => sum + (p.id === 'booster' ? 760 : p.id === 'vac' ? 110 : p.id === 'kick' ? 45 : p.id === 'ion' ? .002 : 0), 0);
-    const twr = total.mass > 0 ? thrust / (total.mass * 9.81) : 0;
+    const perf = performanceOf(chosen()), twr = perf.liftoffTwr;
+    // stages are listed top first, the way they appear in the stack, numbered in firing order
+    const stageRows = perf.stages.map((st, i) => h('li', { class: st.twr < 0.05 && i > 0 ? 'deep-space' : '' },
+      h('b', {}, `S${i + 1} · ${st.engine.short}`), h('span', {}, `Δv ${fmt(st.dv, 2)} km/s`),
+      h('small', {}, `${st.tanks.length ? `${st.tanks.length} × ${uiText('tank', 'réservoir')} · ` : ''}${fmt(st.prop, 1)} t · ${uiText('TWR', 'P/P')} ${fmt(st.twr, 2)}`))).reverse();
     const engineering = h('aside', { class: 'engineering-console' },
       h('div', { class: 'engineering-title' }, h('span', {}, 'BUILD MODE'), h('b', {}, 'FLIGHT ENGINEERING')),
-      h('dl', {}, h('div', {}, h('dt', {}, 'Wet mass'), h('dd', {}, `${fmt(total.mass, 2)} t`)),
-        h('div', {}, h('dt', {}, 'Estimated thrust'), h('dd', {}, `${fmt(thrust, 1)} kN`)),
-        h('div', { class: twr >= 1.15 ? 'nominal' : 'warning' }, h('dt', {}, 'Thrust / weight'), h('dd', {}, fmt(twr, 2))),
-        h('div', {}, h('dt', {}, 'Propulsive stages'), h('dd', {}, String(chosen().filter((p) => p.tags.includes('engine')).length)))),
-      h('p', {}, 'Drag parts into any highlighted gap. Click a palette part to add another copy; use the arrows or drag fitted parts to reorder them.'),
+      h('dl', {}, h('div', {}, h('dt', {}, 'Wet mass'), h('dd', {}, `${fmt(perf.mass, 1)} t`)),
+        h('div', { class: twr >= MIN_LIFTOFF_TWR ? 'nominal' : 'warning' }, h('dt', {}, 'Liftoff thrust / weight'), h('dd', {}, fmt(twr, 2))),
+        h('div', {}, h('dt', {}, 'Stack Δv'), h('dd', {}, `${fmt(perf.deltaV, 2)} km/s`)),
+        h('div', {}, h('dt', {}, 'Propulsive stages'), h('dd', {}, String(perf.stages.length)))),
+      perf.stages.length > 0 && h('ol', { class: 'stage-list', 'aria-label': uiText('Stages', 'Étages') }, ...stageRows),
+      perf.idleTanks.length > 0 && h('p', { class: 'stage-warning' }, uiText(`${perf.idleTanks.length} tank${perf.idleTanks.length > 1 ? 's have' : ' has'} no engine below to burn ${perf.idleTanks.length > 1 ? 'them' : 'it'}: dead weight.`, `${perf.idleTanks.length} réservoir${perf.idleTanks.length > 1 ? 's' : ''} sans moteur en dessous : masse morte.`)),
+      h('p', {}, 'Each engine burns the tanks stacked above it, up to the next engine. Spent stages drop away, so the order of the stack decides the delta-v.'),
       h('div', { class: `readiness ${missing.length ? 'not-ready' : ''}` }, h('b', {}, missing.length ? 'FLIGHT HOLD' : 'CONFIGURATION READY'), h('p', {}, missing.length ? `Resolve: ${missing.join(' · ')}` : 'All mission-critical margins are positive.')));
     return panelShell('VEHICLE INTEGRATION', 'Build the flight stack, one component at a time',
       h('div', { class: 'assembly-layout' }, catalogue, h('section', { class: 'stack-bay' }, h('div', { class: 'bay-head' }, h('span', {}, 'LAUNCH VEHICLE CONFIGURATION'), h('span', {}, `${chosen().length} COMPONENTS`)), stack), engineering),
-      lesson('What the margins mean', 'Budget is not the only limit. The launch vehicle must lift the wet mass; generation must exceed peak load; and available delta-v must cover the trajectory plus contingency.'),
-      h('div', { class: 'lab-actions' }, labButton('Load engineering baseline', () => { state.partIds = baselineFor(); saveState(); renderPanel(); }), labButton('Proceed to flight', () => changeTab('flight'), true, missing.length > 0)));
+      lesson('The rocket equation', 'Delta-v grows with engine efficiency and with the ratio of full to empty mass, but only logarithmically. That is why rockets stage: dropping empty tanks makes every remaining kilogram of propellant count for more.'),
+      h('div', { class: 'lab-actions' }, labButton('Load engineering baseline', () => { state.partIds = baselineFor(); designChanged(); saveState(); renderPanel(); }), labButton('Proceed to flight', () => changeTab('flight'), true, missing.length > 0)));
+  }
+
+  const setClock = (met: number) => { const el = root.querySelector('.sim-clock'); if (el) el.textContent = metText(met); };
+  const flightSteps = (step: 1 | 2) => h('ol', { class: 'flight-steps' },
+    h('li', { class: step === 1 ? 'active' : 'done' }, h('span', {}, '1'), uiText('Launch to orbit', 'Lancement en orbite')),
+    h('li', { class: step === 2 ? 'active' : '' }, h('span', {}, '2'), uiText('Rendezvous and dock', 'Rendez-vous et amarrage')));
+  const describeLaunch = (r: LaunchResult): string => {
+    const p = profile(), need = p.transferNeed;
+    if (r.crashed) return uiText('The vehicle hit the ground. Lean over more gradually, or watch the autopilot fly it once.', "Le véhicule a percuté le sol. Inclinez-vous plus progressivement, ou regardez le pilote automatique le faire une fois.");
+    if (!r.orbit) return uiText('Propellant ran out before orbit. Lean over sooner to build speed along the horizon, or add propellant in assembly.', "Les ergols se sont épuisés avant l'orbite. Inclinez-vous plus tôt pour prendre de la vitesse horizontale, ou ajoutez des ergols.");
+    const orbit = `${fmt(Math.max(0, r.apo) / 1000)} × ${fmt(r.peri / 1000)} km`;
+    if (r.left < need) return uiText(`In orbit (${orbit}), but only ${fmt(r.left, 2)} km/s left and the journey needs ${need}. Fly a cleaner ascent or add propellant.`, `En orbite (${orbit}), mais il ne reste que ${fmt(r.left, 2)} km/s et le voyage en demande ${need}. Volez plus proprement ou ajoutez des ergols.`);
+    return uiText(`Orbit ${orbit} after ${metText(r.met).slice(3)}. ${fmt(r.left, 2)} km/s left; the journey needs ${need}.`, `Orbite ${orbit} après ${metText(r.met).slice(3)}. ${fmt(r.left, 2)} km/s restants ; le voyage en demande ${need}.`);
+  };
+
+  function launchPanel() {
+    const p = profile(), prev = state.launch;
+    const host = h('div', { class: 'launch-host' });
+    const status = h('div', { class: 'flight-status' }, h('b', {}, uiText('LAUNCH TO ORBIT', 'LANCEMENT EN ORBITE')),
+      h('span', {}, prev ? describeLaunch(prev) : uiText(`Reach a stable orbit, lowest point above 150 km, with at least ${p.transferNeed} km/s left for the journey.`, `Atteignez une orbite stable, point bas au-dessus de 150 km, avec au moins ${p.transferNeed} km/s restants pour le voyage.`)));
+    const actions = h('div', { class: 'lab-actions' }, labButton('Return to assembly', () => changeTab('vehicle')), labButton(uiText('Restart launch', 'Recommencer le lancement'), () => renderPanel()));
+    const wrap = panelShell('FLIGHT DYNAMICS', uiText('Fly your rocket to orbit', 'Pilotez votre fusée en orbite'), flightSteps(1), status, host,
+      lesson(uiText('The gravity turn', 'Le virage gravitationnel'), uiText('Orbit is mostly about going sideways fast enough to keep missing the ground: about 7.8 km/s. Climb out of the thick air first, then lean over steadily; every second spent pointing straight up is fuel spent fighting gravity.', "L'orbite, c'est surtout aller assez vite à l'horizontale pour ne jamais retomber : environ 7,8 km/s. Sortez d'abord de l'air dense, puis inclinez-vous régulièrement : chaque seconde passée à la verticale est du carburant dépensé contre la gravité.")),
+      actions);
+    requestAnimationFrame(() => {
+      if (!host.isConnected) return;
+      new LaunchView(host, launchSetupOf(chosen()), {
+        text: uiText, onClock: setClock,
+        onEnd: (r) => {
+          state.launch = r; state.docking = null; state.deployed = false;
+          state.notes.push(r.orbit ? `Orbit ${fmt(Math.max(0, r.apo) / 1000)} × ${fmt(r.peri / 1000)} km reached${r.guided ? ' by autopilot' : ''} with ${fmt(r.left, 2)} km/s left.` : r.crashed ? 'Launch failed: vehicle lost.' : 'Launch failed: out of propellant short of orbit.');
+          saveState();
+          const ok = launchMeetsMission(p, r);
+          status.replaceChildren(h('b', {}, ok ? uiText('ORBIT ACHIEVED', 'ORBITE ATTEINTE') : r.orbit ? uiText('IN ORBIT · NOT ENOUGH Δv', 'EN ORBITE · Δv INSUFFISANT') : r.crashed ? uiText('VEHICLE LOST', 'VÉHICULE PERDU') : uiText('SUBORBITAL', 'SUBORBITAL')), h('span', {}, describeLaunch(r)));
+          status.classList.toggle('good', ok); status.classList.toggle('bad', !ok);
+          if (ok) actions.append(labButton(uiText('Continue to rendezvous', 'Passer au rendez-vous'), () => renderPanel(), true));
+        },
+      });
+    });
+    return wrap;
   }
 
   function flightPanel() {
     const missing = readiness();
+    if (!missing.length && !launchMeetsMission(profile(), state.launch)) return launchPanel();
     const host = h('div', { class: 'flight-host' });
     let trainer: RcsTrainer | null = null;
     let assistRequested = false;
@@ -341,19 +360,27 @@ export function missionLab(onBack: () => void): HTMLElement {
       trainer?.engageAssist();
     }, true);
     const wrap = panelShell('FLIGHT DYNAMICS', 'Fly the rendezvous and dock under RCS',
-      status, host, controls,
+      !missing.length && flightSteps(2), status, host, controls,
       lesson('Relative motion', 'Near another spacecraft, “forward” is not the same as “toward.” Pulse the opposing thruster early: every translation burn must be cancelled before contact.'),
-      h('div', { class: 'lab-actions' }, labButton('Return to assembly', () => changeTab('vehicle')), guided, labButton('Reset approach', () => renderPanel())));
-    if (!missing.length) requestAnimationFrame(() => { if (!host.isConnected) return; trainer = new RcsTrainer(host, (result) => {
-      state.notes.push(result); saveState(); status.replaceChildren(h('b', {}, uiText('SOFT CAPTURE CONFIRMED')), h('span', {}, translateDynamic(result)));
-    }); if (assistRequested) trainer.engageAssist(); });
+      h('div', { class: 'lab-actions' }, labButton('Return to assembly', () => changeTab('vehicle')), labButton(uiText('Fly the launch again', 'Refaire le lancement'), () => { state.launch = null; state.docking = null; state.deployed = false; saveState(); renderPanel(); }), guided, labButton('Reset approach', () => renderPanel())));
+    if (!missing.length) requestAnimationFrame(() => { if (!host.isConnected) return; trainer = new RcsTrainer(host, (result, docking) => {
+      state.notes.push(result); state.docking = docking; saveState(); status.replaceChildren(h('b', {}, uiText('SOFT CAPTURE CONFIRMED')), h('span', {}, translateDynamic(result)));
+      renderNavLocks();
+    }, () => status.replaceChildren(h('b', {}, uiText('RCS PROPELLANT EXHAUSTED', 'ERGOLS RCS ÉPUISÉS')), h('span', {}, uiText('Reset the approach and fly shorter pulses: every burn has to be cancelled by another.', "Réinitialisez l'approche et utilisez des impulsions plus courtes : chaque poussée doit être annulée par une autre.")))); if (assistRequested) trainer.engageAssist(); });
     else host.append(h('div', { class: 'sim-lock' }, h('span', {}, '◈'), h('b', {}, 'VEHICLE NOT READY'), h('p', {}, 'The simulator uses the vehicle you actually assemble. Close every red margin before committing the crew and payload.')));
     return wrap;
   }
 
   function payloadPanel() {
     const p = profile(), payload = parts.find((x) => x.id === payloadPartId(p))!;
-    const canDeploy = has(p.payload) && has('comms') && has('computer');
+    const launched = launchMeetsMission(p, state.launch), docked = !!state.docking;
+    const checks: [string, boolean][] = [
+      [uiText('In orbit with Δv for the journey', 'En orbite avec le Δv du voyage'), launched], [uiText('Docked with the target', 'Amarré à la cible'), docked],
+      ['Separation electrical circuit', has('computer')], ['Command and telemetry link', has('comms')],
+      ['Positive power balance', sums().power >= p.powerNeed], ['Correct payload installed', has(p.payload)],
+    ];
+    const canDeploy = checks.every(([, ok]) => ok);
+    const lockedBecause = !launched ? uiText('FLY THE LAUNCH FIRST', "EFFECTUEZ D'ABORD LE LANCEMENT") : !docked ? uiText('DOCK FIRST', "AMARREZ-VOUS D'ABORD") : uiText('CHECKLIST INCOMPLETE', 'LISTE INCOMPLÈTE');
     const op = p.payload === 'rover' ? h('div', { class: 'rover-field' }, h('div', { class: 'rover' }, '▰─○─○'), h('div', { class: 'terrain-line' }))
       : p.payload === 'satellite' ? h('div', { class: 'orbital-yard' },
         h('div', { class: `station-assembly ${state.deployed ? 'deployed' : ''}` },
@@ -363,8 +390,8 @@ export function missionLab(onBack: () => void): HTMLElement {
         : h('div', { class: 'satellite-field' }, h('div', { class: `payload-object ${state.deployed ? 'deployed' : ''}` }, h('i', {}), h('b', {}, payload.short), h('i', {})));
     return panelShell('PAYLOAD OPERATIONS', state.deployed ? `${payload.name} is operational` : `Commission the ${payload.name}`,
       h('div', { class: 'payload-layout' }, op, h('section', { class: 'ops-checklist' },
-        check('Separation electrical circuit', has('computer')), check('Command and telemetry link', has('comms')), check('Positive power balance', sums().power >= p.powerNeed), check('Correct payload installed', has(p.payload)),
-        h('button', { class: 'deploy-command', type: 'button', disabled: !canDeploy || state.deployed, onclick: () => { state.deployed = true; state.samples += p.payload === 'rover' ? 3 : 1; state.notes.push(`${payload.name} deployed and commissioned.`); saveState(); renderPanel(); } }, state.deployed ? 'DEPLOYMENT COMPLETE' : 'ARM + DEPLOY'))),
+        ...checks.map(([label, ok]) => check(label, ok)),
+        h('button', { class: 'deploy-command', type: 'button', disabled: !canDeploy || state.deployed, onclick: () => { if (!canDeploy) return; state.deployed = true; state.samples += p.payload === 'rover' ? 3 : 1; state.notes.push(`${payload.name} deployed and commissioned.`); saveState(); renderPanel(); } }, state.deployed ? 'DEPLOYMENT COMPLETE' : canDeploy ? 'ARM + DEPLOY' : lockedBecause))),
       lesson('Commissioning is part of the mission', 'Arrival is not success. A payload must separate safely, establish attitude, generate power, acquire a communications link and return scientifically useful data.'),
       h('div', { class: 'lab-actions' }, labButton('Open planetary observatory', () => changeTab('observatory'), true)));
   }
@@ -388,25 +415,34 @@ export function missionLab(onBack: () => void): HTMLElement {
 
   function debriefPanel() {
     const p = profile(), t = sums(), missing = readiness();
-    const score = Math.min(100, Math.max(0, Math.round(100 - Math.max(0, t.cost - p.budget) * 2 - missing.length * 9 + (state.deployed ? 12 : 0) + Math.min(8, state.samples * 2))));
+    const result = scoreMission(p, state.partIds, state.launch, state.docking, state.deployed), score = result.total;
+    const why = (x: ScorePart): string => {
+      if (x.id === 'vehicle') return missing.length ? uiText(`${missing.length} requirement${missing.length > 1 ? 's' : ''} unresolved`, `${missing.length} exigence${missing.length > 1 ? 's' : ''} non résolue${missing.length > 1 ? 's' : ''}`) : uiText('All requirements met', 'Toutes les exigences satisfaites');
+      if (x.id === 'margins') return uiText('Budget, mass, power and Δv headroom', 'Marges de budget, masse, puissance et Δv');
+      if (x.id === 'launch') return !state.launch ? uiText('Not flown', 'Non effectué') : !state.launch.orbit ? uiText('Did not reach orbit', "Orbite non atteinte") : `${state.launch.guided ? uiText('Autopilot', 'Pilote automatique') : uiText('Flown by hand', 'Pilotage manuel')} · ${fmt(state.launch.left, 2)} km/s ${uiText('left', 'restants')}`;
+      if (x.id === 'docking') return !state.docking ? uiText('Not docked', 'Non amarré') : `${state.docking.guided ? uiText('Guided approach', 'Approche guidée') : uiText('Flown by hand', 'Pilotage manuel')} · ${fmt(state.docking.fuel, 0)}% RCS`;
+      return state.deployed ? uiText('Deployed and commissioned', 'Déployée et mise en service') : uiText('Not commissioned', 'Non mise en service');
+    };
+    const label: Record<ScorePart['id'], [string, string]> = { vehicle: ['Vehicle ready', 'Véhicule prêt'], margins: ['Margins', 'Marges'], launch: ['Launch', 'Lancement'], docking: ['Docking', 'Amarrage'], payload: ['Payload', 'Charge utile'] };
     return panelShell('POST-MISSION REVIEW', 'Engineering decisions become evidence',
       h('div', { class: 'debrief-grid' },
-        h('section', { class: 'score-card' }, h('span', {}, 'MISSION PERFORMANCE'), h('b', {}, String(score)), h('small', {}, '/ 100'), h('i', { style: `--score:${score}%` })),
+        h('section', { class: 'score-card' }, h('span', {}, 'MISSION PERFORMANCE'), h('b', {}, String(score)), h('small', {}, '/ 100'), h('i', { style: `--score:${score}%` }),
+          h('dl', { class: 'score-breakdown' }, ...result.parts.map((x) => h('div', { class: x.points >= x.max ? 'score-full' : x.points > 0 ? 'score-part' : 'score-none' }, h('dt', {}, uiText(...label[x.id]), h('small', {}, why(x))), h('dd', {}, `${x.points} / ${x.max}`))))),
         h('section', { class: 'report-card' }, h('h3', {}, p.name), h('p', {}, p.science),
-          h('dl', {}, h('dt', {}, 'Vehicle'), h('dd', {}, `${chosen().length} components · ${fmt(t.mass, 2)} t`), h('dt', {}, 'Cost'), h('dd', {}, `$${fmt(t.cost, 1)}M of $${p.budget}M`), h('dt', {}, 'Payload'), h('dd', {}, state.deployed ? 'Deployed and commissioned' : 'Not commissioned'), h('dt', {}, 'Docking'), h('dd', {}, state.notes.some((n) => n.includes('Docking')) ? 'Soft capture confirmed' : 'Training incomplete'))),
+          h('dl', {}, h('dt', {}, 'Vehicle'), h('dd', {}, `${chosen().length} components · ${fmt(t.mass, 2)} t`), h('dt', {}, 'Cost'), h('dd', {}, `$${fmt(t.cost, 1)}M of $${p.budget}M`), h('dt', {}, 'Payload'), h('dd', {}, state.deployed ? 'Deployed and commissioned' : 'Not commissioned'), h('dt', {}, 'Docking'), h('dd', {}, state.docking ? 'Soft capture confirmed' : 'Training incomplete'))),
         h('section', { class: 'learning-log' }, h('h3', {}, 'Flight director log'), ...(state.notes.length ? state.notes.slice(-5).map((n) => h('p', {}, n)) : [h('p', { class: 'dim' }, 'Complete flight and payload operations to build the evidence log.')]))),
-      h('div', { class: 'lab-actions' }, labButton('Revise the design', () => changeTab('vehicle')), labButton('Start a new mission', () => { state = { profileId: 'moon', partIds: [...starter], deployed: false, samples: 0, notes: [] }; saveState(); changeTab('brief'); }, true)));
+      h('div', { class: 'lab-actions' }, labButton('Revise the design', () => changeTab('vehicle')), labButton('Start a new mission', () => { state = { profileId: 'moon', partIds: [...starter], deployed: false, samples: 0, notes: [], launch: null, docking: null }; saveState(); changeTab('brief'); }, true)));
   }
 
   root.append(nav, h('section', { class: 'lab-workspace' }, h('header', { class: 'lab-topbar' },
-    h('div', {}, h('span', {}, 'ACTIVE PROGRAM'), h('b', {}, profile().name)), h('div', {}, h('span', {}, 'SIMULATION CLOCK'), h('b', {}, 'T+ 000:00:00')), h('i', {}, 'LOCAL / OFFLINE'),
+    h('div', {}, h('span', {}, 'ACTIVE PROGRAM'), h('b', {}, profile().name)), h('div', {}, h('span', {}, 'SIMULATION CLOCK'), h('b', { class: 'sim-clock' }, metText(state.launch?.met ?? 0))), h('i', {}, 'LOCAL / OFFLINE'),
     preferenceControls(() => { const replacement = missionLab(onBack); root.replaceWith(replacement); }, 'lab-preferences')), resources, content));
   renderPanel();
   localizeTree(root);
   return root;
 }
 
-function panelShell(kicker: string, title: string, ...children: HTMLElement[]) {
+function panelShell(kicker: string, title: string, ...children: (HTMLElement | false)[]) {
   return h('section', { class: 'lab-panel' }, h('header', { class: 'panel-title' }, h('p', {}, kicker), h('h2', {}, title)), ...children);
 }
 function lesson(title: string, body: string) { return h('aside', { class: 'lesson-strip' }, h('span', {}, 'INTERMISSION / FLIGHT SCHOOL'), h('div', {}, h('b', {}, title), h('p', {}, body))); }
@@ -415,6 +451,8 @@ function key(k: string, label: string) { return h('span', {}, h('kbd', { 'data-r
 function check(label: string, ok: boolean) { return h('p', { class: ok ? 'check-ok' : 'check-hold' }, h('span', {}, ok ? '✓' : '!'), label); }
 
 class RcsTrainer {
+  /** the craft's probe tip sits 30 px ahead of its centre and the target's ring 54 px behind its own: dock where they meet */
+  static PORT = 84;
   private canvas = document.createElement('canvas');
   private ctx = this.canvas.getContext('2d')!;
   private keys = new Set<string>();
@@ -422,8 +460,9 @@ class RcsTrainer {
   private craft = { x: -210, y: 78, vx: 2.2, vy: -0.12, angle: 14, omega: 0, fuel: 100 };
   private last = performance.now();
   private done = false;
+  private failed = false;
   private assisted = false;
-  constructor(private host: HTMLElement, private complete: (result: string) => void) {
+  constructor(private host: HTMLElement, private complete: (result: string, docking: DockingResult) => void, private exhausted?: () => void) {
     host.append(this.canvas); this.bind(); this.resize(); requestAnimationFrame((t) => this.frame(t));
   }
   engageAssist() { this.assisted = true; }
@@ -464,19 +503,20 @@ class RcsTrainer {
     }
     c.x += c.vx * dt * 4; c.y += c.vy * dt * 4; c.angle += c.omega * dt; c.omega *= Math.pow(.96, dt * 60);
     const range = Math.hypot(c.x, c.y), speed = Math.hypot(c.vx, c.vy), align = Math.abs((((c.angle + 180) % 360) + 360) % 360 - 180);
-    if (range < 8 && speed < .2 && align < 5) { this.done = true; this.complete(`Docking achieved with ${fmt(c.fuel, 1)}% RCS propellant remaining.`); }
+    if (c.fuel <= 0) { this.done = true; this.failed = true; this.exhausted?.(); return; }
+    if (range < 8 && speed < .2 && align < 5) { this.done = true; this.complete(`Docking achieved with ${fmt(c.fuel, 1)}% RCS propellant remaining.`, { fuel: c.fuel, guided: this.assisted }); }
     if (range > 440) { c.x = -210; c.y = 78; c.vx = 2.2; c.vy = -.12; }
   }
   private draw() {
-    const ctx = this.ctx, w = this.canvas.clientWidth, hgt = this.canvas.clientHeight, cx = w * .62, cy = hgt * .5;
+    const ctx = this.ctx, w = this.canvas.clientWidth, hgt = this.canvas.clientHeight, cx = Math.min(w * .62, w - 180), cy = hgt * .5;
     ctx.clearRect(0, 0, w, hgt); const g = ctx.createLinearGradient(0, 0, 0, hgt); g.addColorStop(0, '#06111b'); g.addColorStop(1, '#0b1d2b'); ctx.fillStyle = g; ctx.fillRect(0, 0, w, hgt);
     ctx.strokeStyle = 'rgba(121,190,232,.22)'; ctx.lineWidth = 1; for (let x = cx % 40; x < w; x += 40) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, hgt); ctx.stroke(); } for (let y = cy % 40; y < hgt; y += 40) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke(); }
     ctx.fillStyle = 'rgba(35,111,172,.36)'; ctx.beginPath(); ctx.arc(w * .1, hgt * 1.35, hgt * 1.22, Math.PI, Math.PI * 2); ctx.fill();
-    this.target(ctx, cx, cy); this.vehicle(ctx, cx + this.craft.x, cy + this.craft.y);
+    this.target(ctx, cx + RcsTrainer.PORT, cy); this.vehicle(ctx, cx + this.craft.x, cy + this.craft.y);
     const r = Math.hypot(this.craft.x, this.craft.y), v = Math.hypot(this.craft.vx, this.craft.vy), a = Math.abs((((this.craft.angle + 180) % 360) + 360) % 360 - 180);
     ctx.font = '12px ui-monospace, monospace'; ctx.fillStyle = '#c3d9e8'; ctx.fillText(uiText(this.assisted ? 'GUIDED RCS APPROACH / LVLH' : 'RELATIVE NAVIGATION / LVLH'), 18, 24);
     [['RANGE', `${fmt(r, 1)} m`, r < 8], ['CLOSURE', `${fmt(v, 2)} m/s`, v < .2], ['ALIGN', `${fmt(a, 1)}°`, a < 5], ['RCS', `${fmt(this.craft.fuel, 1)}%`, this.craft.fuel > 20]].forEach((row, i) => { ctx.fillStyle = row[2] ? '#72e4a0' : '#e8b65b'; ctx.fillText(`${uiText(String(row[0]))}  ${row[1]}`, 18, 50 + i * 20); });
-    if (this.done) { ctx.fillStyle = 'rgba(3,14,20,.82)'; ctx.fillRect(0, hgt / 2 - 42, w, 84); ctx.textAlign = 'center'; ctx.font = '600 20px ui-monospace, monospace'; ctx.fillStyle = '#72e4a0'; ctx.fillText(uiText('SOFT CAPTURE · DOCKING CONFIRMED'), w / 2, hgt / 2 + 7); ctx.textAlign = 'left'; }
+    if (this.done) { ctx.fillStyle = 'rgba(3,14,20,.82)'; ctx.fillRect(0, hgt / 2 - 42, w, 84); ctx.textAlign = 'center'; ctx.font = '600 20px ui-monospace, monospace'; ctx.fillStyle = this.failed ? '#f0a35b' : '#72e4a0'; ctx.fillText(this.failed ? uiText('RCS PROPELLANT EXHAUSTED', 'ERGOLS RCS ÉPUISÉS') : uiText('SOFT CAPTURE · DOCKING CONFIRMED'), w / 2, hgt / 2 + 7); ctx.textAlign = 'left'; }
   }
   private target(ctx: CanvasRenderingContext2D, x: number, y: number) {
     ctx.save(); ctx.translate(x, y); ctx.strokeStyle = '#d8e9f2'; ctx.lineWidth = 2; ctx.strokeRect(-40, -12, 80, 24); ctx.beginPath(); ctx.arc(-45, 0, 9, 0, Math.PI * 2); ctx.stroke(); ctx.beginPath(); ctx.moveTo(40, 0); ctx.lineTo(72, 0); ctx.stroke(); ctx.strokeStyle = '#68d7ff'; ctx.beginPath(); ctx.arc(78, 0, 8, 0, Math.PI * 2); ctx.stroke(); ctx.fillStyle = '#91e4ff'; ctx.font = '10px ui-monospace'; ctx.fillText(uiText('TARGET'), -21, -20); ctx.restore();
@@ -496,12 +536,22 @@ function createPlanetarium(host: HTMLElement) {
   const planet = (name: string, radius: number, color: number, x: number, ring = false) => { const g = new THREE.Group(); const m = new THREE.Mesh(new THREE.SphereGeometry(radius, 48, 32), new THREE.MeshStandardMaterial({ color, roughness: .88, metalness: 0 })); g.add(m); if (ring) { const r = new THREE.Mesh(new THREE.RingGeometry(radius * 1.35, radius * 2.25, 96), new THREE.MeshStandardMaterial({ color: 0xcdbb91, side: THREE.DoubleSide, transparent: true, opacity: .72 })); r.rotation.x = Math.PI / 2.15; g.add(r); } g.position.x = x; scene.add(g); bodies[name] = g; return g; };
   planet('EARTH', 2.1, 0x2b6c92, -9); planet('MOON', .62, 0xaaa9a5, -5.8); planet('MARS', 1.25, 0xa74f32, .2); planet('SATURN', 3.1, 0xc9aa71, 9.5, true);
   const orbit = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(Array.from({ length: 128 }, (_, i) => { const a = i / 128 * Math.PI * 2; return new THREE.Vector3(Math.cos(a) * 13, 0, Math.sin(a) * 4.5); })), new THREE.LineBasicMaterial({ color: 0x2b4d68, transparent: true, opacity: .45 })); scene.add(orbit);
-  let dragging = false, px = 0, yaw = 0, pitch = 0; renderer.domElement.addEventListener('pointerdown', (e) => { dragging = true; px = e.clientX; renderer.domElement.setPointerCapture(e.pointerId); }); renderer.domElement.addEventListener('pointermove', (e) => { if (!dragging) return; yaw += (e.clientX - px) * .006; px = e.clientX; }); renderer.domElement.addEventListener('pointerup', () => dragging = false);
-  host.addEventListener('focusplanet', ((e: CustomEvent<string>) => { const b = bodies[e.detail]; if (b) { camera.position.x = b.position.x; camera.position.z = 10 + b.children[0].scale.x; } }) as EventListener);
+  // orbit camera: drag sideways to circle, up and down to tilt; a planet button flies the camera to that planet
+  const focus = new THREE.Vector3(0, 0, 0), aim = new THREE.Vector3(0, 0, 0);
+  let dragging = false, px = 0, py = 0, yaw = 0, pitch = 0.32, dist = 25, distTo = 25;
+  renderer.domElement.style.touchAction = 'none';
+  renderer.domElement.addEventListener('pointerdown', (e) => { dragging = true; px = e.clientX; py = e.clientY; renderer.domElement.setPointerCapture(e.pointerId); });
+  renderer.domElement.addEventListener('pointermove', (e) => { if (!dragging) return; yaw -= (e.clientX - px) * .006; pitch = Math.min(1.25, Math.max(-0.35, pitch + (e.clientY - py) * .005)); px = e.clientX; py = e.clientY; });
+  ['pointerup', 'pointercancel'].forEach((ev) => renderer.domElement.addEventListener(ev, () => { dragging = false; }));
+  host.addEventListener('focusplanet', ((e: CustomEvent<string>) => {
+    const b = bodies[e.detail]; if (!b) return;
+    const radius = ((b.children[0] as THREE.Mesh).geometry as THREE.SphereGeometry).parameters.radius;
+    focus.copy(b.position); distTo = 4 + radius * (b.children.length > 1 ? 4.2 : 3.4);
+  }) as EventListener);
   const xr = (navigator as Navigator & { xr?: unknown }).xr;
   const vrControl = xr ? VRButton.createButton(renderer) : h('button', { class: 'lab-vr-button unavailable', type: 'button', onclick: () => host.requestFullscreen?.() }, 'FULLSCREEN OBSERVATORY · WEBXR HEADSET NOT DETECTED');
   vrControl.classList.add('lab-vr-button'); host.append(vrControl); localizeTree(vrControl);
   if (preferences.language === 'fr') { const observer = new MutationObserver(() => localizeTree(vrControl)); observer.observe(vrControl, { childList: true, characterData: true, subtree: true }); }
   const resize = () => { const r = host.getBoundingClientRect(); renderer.setSize(r.width, r.height, false); camera.aspect = r.width / Math.max(1, r.height); camera.updateProjectionMatrix(); }; const ro = new ResizeObserver(resize); ro.observe(host); resize();
-  renderer.setAnimationLoop((time) => { if (!host.isConnected) { renderer.setAnimationLoop(null); ro.disconnect(); renderer.dispose(); return; } const t = time * .0001; Object.values(bodies).forEach((b, i) => b.rotation.y = t * (1 + i * .15)); camera.position.y = 6 + Math.sin(pitch) * 4; camera.lookAt(Math.sin(yaw) * 5, 0, 0); renderer.render(scene, camera); });
+  renderer.setAnimationLoop((time) => { if (!host.isConnected) { renderer.setAnimationLoop(null); ro.disconnect(); renderer.dispose(); return; } const t = time * .0001; Object.values(bodies).forEach((b, i) => b.rotation.y = t * (1 + i * .15)); aim.lerp(focus, .08); dist += (distTo - dist) * .08; camera.position.set(aim.x + Math.sin(yaw) * Math.cos(pitch) * dist, aim.y + Math.sin(pitch) * dist, aim.z + Math.cos(yaw) * Math.cos(pitch) * dist); camera.lookAt(aim); renderer.render(scene, camera); });
 }

@@ -11,19 +11,36 @@ The new visual direction uses restrained flight-software typography, measured co
 
 Built with TypeScript, Vite and three.js.
 
-## Mission Lab controls
+## Mission Lab
 
-- Assemble the vehicle by fitting and removing individual structure, propulsion, guidance, power, communications and payload components. The integration bay shows the actual stack order.
-- The assembly bay uses a blueprint-style visual parts rail and metallic vehicle silhouettes. Every fitted component changes the live wet-mass, estimated-thrust, thrust-to-weight, power, budget and delta-v readouts.
-- Parts can be dragged into any gap in the vehicle stack or dragged again to reorder them. Clicking a palette item adds another copy, so multi-tank, multi-engine and repeated-module vehicles are supported.
-- Watch budget, mass, power and delta-v continuously. Flight remains locked until every mission-critical requirement and margin is satisfied.
-- During docking, use **W/A/S/D** for RCS translation and **Q/E** for rotation. Safe capture requires range under 8 m, relative speed under 0.20 m/s and alignment under 5°. **Run guided approach** demonstrates the correct burn-and-cancel technique.
-- Use the **EN/FR** and **Light/Dark** controls on the title screen or Mission Lab toolbar. Both preferences persist locally between visits.
-- Guided approach acknowledges the command immediately, flies the rendezvous at a short training pace, and reports soft capture plus remaining RCS propellant.
-- Payload operations verify separation, telemetry, power and payload compatibility before deployment.
-- Earth and lunar relay payloads use a modular orbital-construction view with truss, pressure modules and deployable solar wings.
-- The planetary observatory uses a live three.js scene with compressed visual spacing and labelled real reference values. On a compatible HTTPS-served browser and headset, its WebXR control enters immersive VR; other browsers retain the interactive on-screen observatory.
-- Mission designs and the flight-director log persist locally in the browser. No account or network connection is required for the simulation.
+Choose a mission (Earth, Moon, Mars or Saturn), build a rocket, fly it to orbit, dock, deploy the payload, and get a debrief that scores what you actually did.
+
+### Building the rocket
+
+- Parts stack bottom first. Drag them into a gap in the stack, click a palette part to add another copy, and use the arrows or drag to reorder.
+- The physics is real-scale. Each engine burns the propellant in the tanks stacked above it, up to the next engine. Spent stages drop away, and the fairing goes at the first staging. Delta-v comes from the rocket equation, stage by stage, so the order and mass of the stack matter. A tank with no engine below it is dead weight.
+- The engineering panel lists every stage with its delta-v and thrust-to-weight.
+- Solar arrays are rated at 1 AU, and their output falls with the square of distance from the Sun. Far missions need an RTG or a reactor.
+- Flight is locked until the budget, mass, power, delta-v and liftoff thrust-to-weight (at least 1.2) are all within limits. **Load engineering baseline** gives a known-good rocket for each mission. Mars and Saturn rely on the ion drive.
+
+### Flying to orbit
+
+- Reach an orbit whose lowest point is above 150 km, with enough delta-v left for the mission's journey. The planet is a real-size Earth with no atmosphere.
+- Keys: **A/D** or **←/→** lean, **W/S** or **↑/↓** throttle, **Z** full throttle, **X** cut, **Space** stage, **M** map, **,** and **.** time warp. On-screen buttons do the same for a mouse or a finger.
+- The dashed line and the coach show what guidance would do. **Autopilot** flies the tested guidance, but scores less than flying it yourself.
+
+### Docking and payload
+
+- Docking uses **W/A/S/D** to translate and **Q/E** to rotate. Capture needs range under 8 m, closure under 0.20 m/s and alignment under 5°. Running out of RCS propellant ends the attempt. **Run guided approach** shows the technique, for fewer points.
+- Payload deployment unlocks after orbit and docking, once every checklist item is green.
+- Changing the rocket clears its launch, docking and deployment, so they have to be flown again.
+- The debrief scores the vehicle (20), margins (15), launch (25), docking (20) and payload (20).
+
+### Elsewhere in the lab
+
+- The planetary observatory: drag to orbit the camera, and click a planet to fly to it. WebXR works on a compatible HTTPS-served browser and headset.
+- **EN/FR** and **Light/Dark** controls sit on the title screen and the lab toolbar. Light applies to the title and the lab; the campaign stays dark.
+- Designs and the flight-director log are saved locally in the browser. No account or network connection is needed.
 
 ## Run it
 
@@ -39,7 +56,7 @@ Then open http://localhost:5173.
 ## Other commands
 
 - `npm run build` checks the types and builds a static site into `dist/`. You can host that folder on GitHub Pages, Netlify or itch.io.
-- `npm test` runs the simulation, flying and session tests.
+- `npm test` runs the simulation, flying and session tests, including the Mission Lab's physics. Every mission's baseline is flown to orbit by the autopilot.
 - `npm run e2e` plays the whole game in Chrome, by autopilot and by a scripted pilot. Start `npm run dev` first.
 
 ## How to play
@@ -66,7 +83,8 @@ Then open http://localhost:5173.
 
 - `src/main.ts`: the screens and game flow.
 - `src/data/`: the story, the questions, events, endings and the chapter settings.
-- `src/sim/`: the simulation that decides whether the mission works. `ascent.ts`, `orbit.ts` and `landing.ts` hold every rule and number for the flying.
+- `src/lab/`: the Mission Lab rules. `catalog.ts` holds the parts, missions, readiness and score; `physics.ts` the staging and rocket equation; `launch.ts` the flight to orbit and its autopilot; `launchview.ts` the flight on screen.
+- `src/sim/`: the historical campaign's simulation, which decides whether the mission works. `ascent.ts`, `orbit.ts` and `landing.ts` hold every rule and number for the flying.
 - `src/three/`: the 3D launch pad, rocket and spacecraft, `flight.ts` (the flight you fly) and `landerview.ts` (the side view of the landing).
 - `src/ui/`: meters, sound, the flying controls (`flycontrols.ts`) and the flying overlays (`flyhud.ts`).
 - `public/textures/`: drop real NASA imagery here, credited to NASA.

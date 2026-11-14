@@ -2,7 +2,7 @@
 body[data-screen="lab"] { overflow-x: hidden; background: #03070b; }
 body[data-screen="lab"]::before { display: none; }
 body[data-screen="lab"] .backdrop { filter: brightness(.18) saturate(.55); }
-body[data-screen="lab"] .mute { display: none; }
+body[data-screen="lab"] .mute { z-index: 30; }
 .mission-lab { --mission: #73b9ff; position: relative; z-index: 5; min-height: 100vh; display: grid; grid-template-columns: 242px minmax(0,1fr); color: #dbe6ed; background: radial-gradient(circle at 80% -20%, color-mix(in srgb, var(--mission) 9%, transparent), transparent 44%), linear-gradient(rgba(255,255,255,.018) 1px, transparent 1px), linear-gradient(90deg,rgba(255,255,255,.018) 1px,transparent 1px), #04090d; background-size: auto, 32px 32px, 32px 32px, auto; font-family: Inter, ui-sans-serif, system-ui, sans-serif; }
 .mission-lab button { font: inherit; }
 .preference-controls { display:flex!important; grid-template-columns:none!important; gap:6px!important; align-items:center; }
@@ -118,10 +118,11 @@ body[data-screen="lab"] .mute { display: none; }
 .debrief-grid{display:grid;grid-template-columns:260px 1fr;gap:14px}.score-card,.report-card,.learning-log{background:#071118;border:1px solid #1c313b;padding:24px}.score-card{grid-row:1/3;display:grid;align-content:center;justify-items:center;min-height:330px}.score-card span{color:#728792;font:.61rem var(--mono);letter-spacing:.12em}.score-card b{font:300 7rem/1 system-ui;color:#f1f6f8}.score-card small{color:#60737f}.score-card i{display:block;width:170px;height:3px;margin-top:22px;background:linear-gradient(90deg,var(--mission) var(--score),#1b3039 var(--score))}.report-card h3,.learning-log h3{color:#dfe9ed;font:650 .75rem var(--mono);letter-spacing:.1em}.report-card>p{color:#899da7}.report-card dl{display:grid;grid-template-columns:110px 1fr;gap:9px;margin:20px 0 0}.report-card dt{color:#617783;font:.63rem var(--mono);text-transform:uppercase}.report-card dd{margin:0;color:#c4d1d7;font-size:.78rem}.learning-log p{padding:8px 0;margin:0;border-bottom:1px solid #142731;color:#92a5ae;font-size:.78rem}
 
 /* Persistent light theme. Flight and observatory canvases stay dark to preserve instrument contrast. */
-body[data-theme="light"] { --bg:#e7edf0; --panel:#fff; --panel2:#edf2f4; --line:#c7d2d8; --text:#17252d; --dim:#5f737d; color-scheme:light; background:#e7edf0; color:var(--text); }
-body[data-theme="light"]:not([data-screen="lab"]) .backdrop { filter:grayscale(.25) brightness(1.55) opacity(.2); }
-body[data-theme="light"]:not([data-screen="lab"])::before { display:none; }
-body[data-theme="light"]::after { display:none; }
+/* Light theme is designed for the title and the lab only; the gate and the campaign's cinematic screens stay dark. */
+body[data-theme="light"]:is([data-screen="lab"],[data-screen="title"]) { --bg:#e7edf0; --panel:#fff; --panel2:#edf2f4; --line:#c7d2d8; --text:#17252d; --dim:#5f737d; color-scheme:light; background:#e7edf0; color:var(--text); }
+body[data-theme="light"][data-screen="title"] .backdrop { filter:grayscale(.25) brightness(1.55) opacity(.2); }
+body[data-theme="light"][data-screen="title"]::before { display:none; }
+body[data-theme="light"]:is([data-screen="lab"],[data-screen="title"])::after { display:none; }
 body[data-theme="light"] .titlescreen { z-index:100; color:#17252d; }
 body[data-theme="light"] .slam h1 .a { opacity:1!important; color:#17252d!important; background:none!important; filter:none!important; text-shadow:none!important; }
 body[data-theme="light"] .slam h1 .b,body[data-theme="light"] .slam .tag,body[data-theme="light"] .slam .sub,body[data-theme="light"] .titlescreen .fine { opacity:1!important; color:#17252d!important; text-shadow:none!important; }
@@ -163,3 +164,82 @@ html[lang="fr"] .menu { margin-top:3vh; }
 
 @media(max-width:980px){.mission-lab{grid-template-columns:76px minmax(0,1fr)}.lab-nav{padding:14px 8px}.lab-brand{grid-template-columns:1fr;padding:4px 16px 20px}.lab-brand div{display:none}.lab-nav>button{grid-template-columns:1fr;justify-items:center;padding:12px 4px}.lab-nav>button b{font-size:.56rem;text-align:center}.lab-nav .lab-exit{font-size:0}.lab-nav .lab-exit::after{content:"←";font-size:1rem}.assembly-layout{grid-template-columns:92px minmax(360px,1fr)}.engineering-console{grid-column:1/-1;min-height:0;position:static}.engineering-console dl{display:grid;grid-template-columns:1fr 1fr;gap:0 18px}.payload-layout,.observatory-layout{grid-template-columns:1fr}.stack-bay{min-height:660px}.stack-callout{left:calc(50% + 78px)}.ops-checklist,.planet-facts{border-left:0;border-top:1px solid #203540}.mission-grid{grid-template-columns:1fr}.resource-rail{grid-template-columns:1fr 1fr}.lab-topbar>div:nth-child(2){display:none}.debrief-grid{grid-template-columns:1fr}.score-card{grid-row:auto;min-height:240px}.rcs-controls{grid-template-columns:1fr}.rcs-readout{display:none}}
 @media(max-width:620px){.mission-lab{display:block;padding-bottom:68px}.lab-nav{position:fixed;inset:auto 0 0 0;height:66px;display:grid;grid-template-columns:repeat(6,1fr);padding:0;background:#061017;border:0;border-top:1px solid #243945}.lab-brand,.lab-nav .lab-exit{display:none}.lab-nav>button{grid-template-columns:1fr;padding:7px 2px;border-left:0;border-top:2px solid transparent}.lab-nav>button.active{border-top-color:var(--mission);border-left:0}.lab-nav>button span{display:none}.lab-nav>button b{font-size:.48rem}.lab-topbar{padding:0 14px}.lab-topbar>i{display:none}.resource{padding:9px 10px}.resource>span{font-size:.52rem}.resource>b{font-size:.6rem}.lab-content{padding:24px 8px 60px}.panel-title h2{font-size:1.75rem}.mission-card{grid-template-columns:42px 1fr;padding:13px}.mission-card>strong{display:none}.mission-orbit{width:38px;height:38px}.lesson-strip{grid-template-columns:1fr;gap:6px}.assembly-layout{grid-template-columns:78px minmax(0,1fr);gap:6px}.parts-console{min-height:600px}.part-tile-grid{grid-template-columns:1fr}.part-tile{height:68px}.engineering-console{grid-column:1/-1}.stack-callout{display:none}.stack-bay{min-height:600px}.vehicle-stack{padding-left:8px;padding-right:8px}.stack-solar .stack-part-body{width:145px}.flight-host{min-height:360px}.rcs-keymap{grid-template-columns:repeat(3,1fr)}.payload-object{grid-template-columns:70px 75px 70px}.station-assembly{transform:rotate(-28deg) scale(.68)}.station-assembly.deployed{animation:none}.observatory-layout,.planetarium{min-height:470px}.lab-actions{flex-direction:column}.lab-button{width:100%}}
+/* debrief: where the score came from */
+.score-card .score-breakdown{width:100%;margin:22px 0 0;display:grid;gap:0}
+.score-breakdown>div{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:baseline;padding:8px 0;border-top:1px solid #142731}
+.score-breakdown dt{color:#c4d1d7;font:650 .66rem var(--mono);letter-spacing:.06em;text-transform:uppercase}
+.score-breakdown dt small{display:block;margin-top:3px;color:#728792;font:400 .7rem system-ui;letter-spacing:0;text-transform:none}
+.score-breakdown dd{margin:0;color:#c4d1d7;font:650 .72rem var(--mono)}
+.score-breakdown .score-full dd{color:#72e4a0}.score-breakdown .score-none dd{color:#e8b65b}
+body[data-theme="light"] .score-breakdown>div{border-color:#d3dde2}
+body[data-theme="light"] .score-breakdown dt,body[data-theme="light"] .score-breakdown dd{color:#172830}
+body[data-theme="light"] .score-breakdown dt small{color:#4e6570}
+body[data-theme="light"] .score-breakdown .score-full dd{color:#16794a}body[data-theme="light"] .score-breakdown .score-none dd{color:#8a5a00}
+/* Light theme: small labels drawn in the mission colour need a darker shade to stay readable, and the primary action keeps its fill. */
+body[data-theme="light"] .panel-title p,body[data-theme="light"] .lesson-strip>span,body[data-theme="light"] .engineering-title span,body[data-theme="light"] .parts-console-head span { color:color-mix(in srgb,var(--mission) 35%,#132730); }
+body[data-theme="light"] .lab-button.primary { color:#fff; background:#17303b; border-color:#17303b; }
+body[data-theme="light"] .lab-button.primary:hover:not(:disabled) { color:#fff; background:#0b1b22; }
+/* Phone: keep a way out of the lab, and keep the move/remove buttons for fitted parts beside the stack. */
+@media(max-width:620px){
+  .lab-nav{grid-template-columns:repeat(7,1fr)}
+  .lab-nav .lab-exit{display:grid;place-items:center;margin:0;padding:0;border:0;border-left:1px solid #243945}
+  .stack-part{padding-right:104px}
+  .stack-axis{left:calc(50% - 52px)}
+  .stack-callout{display:grid;left:auto;right:0;width:auto;padding-left:0}
+  .stack-callout::before,.stack-callout b,.stack-callout small{display:none}
+  .stack-callout>span{position:static}
+  .stack-callout button{width:30px;height:30px}
+}
+/* engineering console: the stages, top of the stack first */
+.stage-list{list-style:none;margin:0;padding:0 13px;display:grid;gap:0}
+.stage-list li{display:grid;grid-template-columns:1fr auto;gap:2px 10px;padding:8px 0;border-bottom:1px solid #172a35}
+.stage-list b{color:#dbe6ed;font:650 .62rem var(--mono);letter-spacing:.06em}
+.stage-list span{color:var(--mission);font:650 .62rem var(--mono);text-align:right}
+.stage-list small{grid-column:1/-1;color:#728792;font:.58rem var(--mono)}
+.stage-list li.deep-space span::after{content:" ⚡";color:#9fd6ff}
+.stage-warning{margin:10px 13px 0!important;padding:8px 10px;border:1px solid #6b4a1a;background:#2a1d0b;color:#f0c27a!important;font-size:.72rem}
+body[data-theme="light"] .stage-list li{border-color:#d0dce1}
+body[data-theme="light"] .stage-list b{color:#172a33}
+body[data-theme="light"] .stage-list span{color:color-mix(in srgb,var(--mission) 35%,#132730)}
+body[data-theme="light"] .stage-list small{color:#556d78}
+body[data-theme="light"] .stage-warning{background:#fff4e0;border-color:#d9a54f;color:#6b4300!important}
+/* flight: launch to orbit, then rendezvous */
+.flight-steps{list-style:none;display:flex;gap:6px;margin:0 0 12px;padding:0}
+.flight-steps li{display:flex;align-items:center;gap:8px;padding:7px 12px;border:1px solid #1d3440;color:#6d828e;font:650 .62rem var(--mono);letter-spacing:.08em;text-transform:uppercase}
+.flight-steps li span{display:grid;place-items:center;width:18px;height:18px;border:1px solid currentColor;font-size:.58rem}
+.flight-steps li.active{color:#dbe6ed;border-color:var(--mission)}
+.flight-steps li.done{color:#72e4a0;border-color:#2c6b48}
+.flight-status.good b{color:#72e4a0}.flight-status.bad b{color:#f0a35b}
+.launch-host{position:relative;border:1px solid #213945;background:#03080d}
+.launch-host canvas{display:block;touch-action:none}
+.lv-strip{display:flex;flex-wrap:wrap;align-items:center;gap:10px 18px;padding:12px 14px;background:#0c1a23;border-top:1px solid #2a4959}
+.lv-group{display:flex;align-items:center;gap:6px}
+.lv-group>span{color:#7f98a6;font:.6rem var(--mono);letter-spacing:.1em;margin-right:2px}
+.lv-key{min-width:40px;height:36px;padding:0 10px;color:#f0f7fa;background:#172a35;border:1px solid #547383;font:650 .66rem var(--mono)!important;letter-spacing:.06em;cursor:pointer;user-select:none;touch-action:none}
+.lv-key:hover{border-color:var(--mission)}.lv-key:active,.lv-key.on{background:var(--mission);color:#021016}
+.lv-stage{border-color:#c98a2e;color:#f0c27a}
+.lv-auto{border-color:var(--mission)}.lv-auto:disabled{opacity:.6;cursor:default}
+.lv-keys{flex-basis:100%;margin:0;color:#61798a;font:.6rem var(--mono)}
+body[data-theme="light"] .flight-steps li{border-color:#bdcbd2;color:#5b717b}
+body[data-theme="light"] .flight-steps li.active{color:#172830}
+body[data-theme="light"] .flight-steps li.done{color:#16794a;border-color:#8cc9a6}
+body[data-theme="light"] .lv-strip{background:#eef3f5;border-color:#bdcbd2}
+body[data-theme="light"] .lv-key{color:#172830;background:#fff;border-color:#98adb7}
+body[data-theme="light"] .lv-stage{color:#8a5a00;border-color:#d9a54f}
+body[data-theme="light"] .lv-group>span,body[data-theme="light"] .lv-keys{color:#556d78}
+@media(max-width:620px){.lv-strip{gap:8px}.lv-key{min-width:44px;height:44px}.lv-keys{display:none}.flight-steps li{font-size:.52rem;padding:6px 8px}}
+.lab-nav>button.locked{opacity:.4;cursor:not-allowed}
+.lab-nav>button.locked b::after{content:" 🔒";font-size:.7em}
+/* assembly bay: the rocket on the left, a tidy column of labels and controls on the right, nothing on top of the parts */
+@media(min-width:621px){
+  .stack-part{min-height:32px;padding-right:232px}
+  .stack-axis{left:calc(50% - 116px)}
+  .stack-part-body span{display:none}
+  .stack-callout{left:auto;right:10px;width:214px;padding-left:0;grid-template-columns:minmax(0,1fr) auto;column-gap:8px;align-items:center}
+  .stack-callout::before{display:none}
+  .stack-callout b{grid-column:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .stack-callout small{grid-column:1}
+  .stack-callout>span{position:static;grid-column:2;grid-row:1/3}
+  .stack-callout button{width:22px;height:22px}
+}
+@media(max-width:620px){ body[data-screen="lab"] .mute{bottom:78px} }
