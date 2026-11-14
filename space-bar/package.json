@@ -1,0 +1,24 @@
+{
+  "name": "race-to-the-moon",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "balance": "vitest run tests/balance.test.ts --reporter=verbose",
+    "e2e": "node scripts/e2e.cjs"
+  },
+  "devDependencies": {
+    "@types/three": "^0.187.0",
+    "playwright-core": "^1.65.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.6",
+    "vitest": "^5.1.0"
+  },
+  "dependencies": {
+    "three": "^0.187.0"
+  }
+}
