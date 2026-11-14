@@ -6,7 +6,7 @@ import { h, fmt } from './ui/dom';
 type Tab = 'brief' | 'vehicle' | 'flight' | 'payload' | 'observatory' | 'debrief';
 type Language = 'en' | 'fr';
 type Theme = 'dark' | 'light';
-type Category = 'Propulsion' | 'Structure' | 'Guidance' | 'Power' | 'Communications' | 'Payload';
+type Category = 'Propulsion' | 'Structure' | 'Guidance' | 'Power' | 'Communications' | 'Payload' | 'Aero' | 'Landing' | 'Structural' | 'Docking';
 type Part = {
   id: string; category: Category; name: string; short: string; mass: number; cost: number;
   power: number; deltaV: number; tags: string[]; note: string;
@@ -166,6 +166,14 @@ const parts: Part[] = [
   { id: 'sat', category: 'Payload', name: 'Modular relay satellite', short: 'RELAY SAT', mass: 1.35, cost: 24, power: -1.6, deltaV: 0, tags: ['payload', 'satellite'], note: 'Optical crosslinks, X-band relay and a 5-year radiation design life.' },
   { id: 'rover', category: 'Payload', name: 'Autonomous geology rover', short: 'ROVER', mass: 1.92, cost: 58, power: -2.2, deltaV: 0, tags: ['payload', 'rover'], note: 'Six-wheel rocker-bogie chassis with coring drill and sample cache.' },
   { id: 'probe', category: 'Payload', name: 'Ring-plane science probe', short: 'RING PROBE', mass: 2.46, cost: 76, power: -2.8, deltaV: 0, tags: ['payload', 'probe'], note: 'Dust analyzer, magnetometer, wide-angle imager and armored electronics.' },
+  { id: 'heatshield', category: 'Aero', name: 'Ablative heat shield', short: 'HEAT SHIELD', mass: 0.72, cost: 7.2, power: 0, deltaV: 0, tags: ['heatshield'], note: 'Protects a capsule or probe during atmospheric entry.' },
+  { id: 'fin', category: 'Aero', name: 'Aerodynamic stabilizer', short: 'FIN', mass: 0.18, cost: 1.4, power: 0, deltaV: 0, tags: ['aero'], note: 'A radial fin for launch stability and atmospheric control.' },
+  { id: 'leg', category: 'Landing', name: 'Telescoping landing leg', short: 'LANDING LEG', mass: 0.24, cost: 2.6, power: 0, deltaV: 0, tags: ['landing'], note: 'A surface-mounted shock-absorbing landing leg.' },
+  { id: 'wheel', category: 'Landing', name: 'Powered rover wheel', short: 'ROVER WHEEL', mass: 0.12, cost: 2.1, power: -0.16, deltaV: 0, tags: ['wheel'], note: 'Motorized wheel for rovers and mobile surface laboratories.' },
+  { id: 'radial', category: 'Structure', name: 'Radial decoupler', short: 'RADIAL SEP', mass: 0.16, cost: 2.8, power: 0, deltaV: 0, tags: ['staging'], note: 'Connects side boosters or payloads and separates them on command.' },
+  { id: 'truss-short', category: 'Structural', name: 'Short modular truss', short: 'TRUSS S', mass: 0.28, cost: 2.4, power: 0, deltaV: 0, tags: ['structure'], note: 'A lightweight attachment frame for stations, satellites and rovers.' },
+  { id: 'truss-long', category: 'Structural', name: 'Long modular truss', short: 'TRUSS L', mass: 0.52, cost: 4.1, power: 0, deltaV: 0, tags: ['structure'], note: 'A long attachment frame for arrays, habitats and payload booms.' },
+  { id: 'port', category: 'Docking', name: 'Low-profile docking port', short: 'DOCK PORT', mass: 0.2, cost: 5.8, power: -0.06, deltaV: 0, tags: ['dock'], note: 'A compact docking port that can connect to any vehicle module.' },
 ];
 
 const tabMeta: { id: Tab; no: string; label: string }[] = [
@@ -174,18 +182,23 @@ const tabMeta: { id: Tab; no: string; label: string }[] = [
   { id: 'observatory', no: '05', label: 'Planetary observatory' }, { id: 'debrief', no: '06', label: 'Mission debrief' },
 ];
 
-interface LabState { profileId: string; partIds: string[]; deployed: boolean; samples: number; notes: string[] }
+interface Placement { x: number; y: number; r: number }
+interface LabState { profileId: string; partIds: string[]; placements: Placement[]; symmetry: boolean; deployed: boolean; samples: number; notes: string[] }
 const starter = ['booster', 'tank', 'vac', 'computer', 'rcs', 'wheels', 'solar', 'battery', 'dish', 'adapter', 'fairing'];
 let state: LabState = loadState();
 let lastTab: Tab = 'brief';
+let assemblyHistory: LabState[] = [];
+const rememberAssembly = () => { assemblyHistory.push(JSON.parse(JSON.stringify(state))); if (assemblyHistory.length > 30) assemblyHistory.shift(); };
 
 function loadState(): LabState {
   try {
     const raw = localStorage.getItem('spacebar.missionlab.v1');
-    if (raw) return { profileId: 'moon', partIds: [...starter], deployed: false, samples: 0, notes: [], ...JSON.parse(raw) };
+    if (raw) { const loaded = { profileId: 'moon', partIds: [...starter], placements: [], symmetry: false, deployed: false, samples: 0, notes: [], ...JSON.parse(raw) }; loaded.placements = normalizePlacements(loaded.partIds, loaded.placements); return loaded; }
   } catch { /* local storage is optional */ }
-  return { profileId: 'moon', partIds: [...starter], deployed: false, samples: 0, notes: [] };
+  return { profileId: 'moon', partIds: [...starter], placements: defaultPlacements(starter), symmetry: false, deployed: false, samples: 0, notes: [] };
 }
+function defaultPlacements(ids: string[]): Placement[] { return ids.map((_, i) => ({ x: 50, y: Math.max(10, 87 - i * 7), r: 0 })); }
+function normalizePlacements(ids: string[], incoming: Placement[] = []) { const defaults = defaultPlacements(ids); return ids.map((_, i) => incoming[i] && Number.isFinite(incoming[i].x) ? incoming[i] : defaults[i]); }
 function saveState() { try { localStorage.setItem('spacebar.missionlab.v1', JSON.stringify(state)); } catch { /* optional */ } }
 const profile = () => profiles.find((p) => p.id === state.profileId) ?? profiles[1];
 const payloadPartId = (p = profile()) => p.payload === 'satellite' ? 'sat' : p.payload;
@@ -226,7 +239,7 @@ export function missionLab(onBack: () => void): HTMLElement {
   const nav = h('nav', { class: 'lab-nav', 'aria-label': 'Mission phases' },
     h('div', { class: 'lab-brand' }, h('i', {}), h('div', {}, h('b', {}, 'ORBITAL SYSTEMS LAB'), h('span', {}, 'Mission design simulator'))),
     ...tabMeta.map((t) => h('button', { type: 'button', 'data-tab': t.id, onclick: () => changeTab(t.id) }, h('span', {}, t.no), h('b', {}, t.label))),
-    h('button', { type: 'button', class: 'lab-exit', onclick: onBack }, '← Historical campaign'));
+    h('button', { type: 'button', class: 'lab-exit', onclick: onBack }, '← Start page'));
   function renderPanel() {
     nav.querySelectorAll('[data-tab]').forEach((el) => el.classList.toggle('active', (el as HTMLElement).dataset.tab === active));
     renderResources();
@@ -250,13 +263,15 @@ export function missionLab(onBack: () => void): HTMLElement {
   }
 
   function vehiclePanel() {
-    const categories: Category[] = ['Structure', 'Propulsion', 'Guidance', 'Power', 'Communications', 'Payload'];
+    const categories: Category[] = ['Structure', 'Propulsion', 'Guidance', 'Power', 'Communications', 'Payload', 'Aero', 'Landing', 'Structural', 'Docking'];
     const dragType = 'application/x-spacebar-part';
-    const addPart = (p: Part, at = state.partIds.length) => {
-      state.partIds.splice(Math.max(0, Math.min(at, state.partIds.length)), 0, p.id);
+    const addPart = (p: Part, placement?: Placement) => {
+      rememberAssembly(); const at = placement ?? { x: state.symmetry ? 38 : 50, y: 72, r: 0 };
+      state.partIds.push(p.id); state.placements.push(at);
+      if (state.symmetry && Math.abs(at.x - 50) > 2) { state.partIds.push(p.id); state.placements.push({ ...at, x: 100 - at.x, r: (360 - at.r) % 360 }); }
       saveState(); renderPanel();
     };
-    const removePart = (index: number) => { state.partIds.splice(index, 1); saveState(); renderPanel(); };
+    const removePart = (index: number) => { rememberAssembly(); state.partIds.splice(index, 1); state.placements.splice(index, 1); saveState(); renderPanel(); };
     const startDrag = (ev: DragEvent, partId: string, sourceIndex?: number) => {
       const data = JSON.stringify({ partId, sourceIndex });
       ev.dataTransfer?.setData(dragType, data); ev.dataTransfer?.setData('text/plain', data);
@@ -264,18 +279,17 @@ export function missionLab(onBack: () => void): HTMLElement {
       root.classList.add('part-dragging');
     };
     const finishDrag = () => root.classList.remove('part-dragging');
-    const dropPart = (ev: DragEvent, insertion: number) => {
+    const dropPart = (ev: DragEvent, canvas: HTMLElement) => {
       ev.preventDefault(); ev.stopPropagation();
       const raw = ev.dataTransfer?.getData(dragType) || ev.dataTransfer?.getData('text/plain');
       if (!raw) return finishDrag();
       try {
         const data = JSON.parse(raw) as { partId: string; sourceIndex?: number };
-        let target = insertion;
+        rememberAssembly(); const rect = canvas.getBoundingClientRect();
+        const placement = { x: Math.max(3, Math.min(97, (ev.clientX - rect.left) / rect.width * 100)), y: Math.max(3, Math.min(97, (ev.clientY - rect.top) / rect.height * 100)), r: 0 };
         if (typeof data.sourceIndex === 'number') {
-          if (data.sourceIndex < target) target--;
-          state.partIds.splice(data.sourceIndex, 1);
-        }
-        state.partIds.splice(Math.max(0, Math.min(target, state.partIds.length)), 0, data.partId);
+          state.placements[data.sourceIndex] = placement;
+        } else { state.partIds.push(data.partId); state.placements.push(placement); if (state.symmetry && Math.abs(placement.x - 50) > 2) { state.partIds.push(data.partId); state.placements.push({ ...placement, x: 100 - placement.x }); } }
         saveState(); renderPanel();
       } finally { finishDrag(); }
     };
@@ -289,25 +303,15 @@ export function missionLab(onBack: () => void): HTMLElement {
             h('i', { class: `part-render render-${p.id}`, 'aria-hidden': 'true' }),
             h('span', {}, p.short), h('small', {}, count ? `${count} × FITTED` : '+ ADD'));
         }))))));
-    const entries = state.partIds.map((id, index) => ({ part: parts.find((p) => p.id === id), index })).filter((entry): entry is { part: Part; index: number } => !!entry.part).reverse();
-    const dropZone = (visualGap: number) => {
-      const insertion = state.partIds.length - visualGap;
-      return h('div', { class: 'stack-drop-zone', ondragover: (ev: DragEvent) => { ev.preventDefault(); if (ev.dataTransfer) ev.dataTransfer.dropEffect = 'move'; }, ondragenter: (ev: DragEvent) => (ev.currentTarget as HTMLElement).classList.add('active'), ondragleave: (ev: DragEvent) => (ev.currentTarget as HTMLElement).classList.remove('active'), ondrop: (ev: DragEvent) => dropPart(ev, insertion) }, h('span', {}, 'DROP HERE'));
-    };
-    const stackNodes: HTMLElement[] = [dropZone(0)];
-    entries.forEach(({ part: p, index }, visualIndex) => {
-      stackNodes.push(h('div', { class: `stack-part stack-${p.id} cat-${p.category.toLowerCase()}` },
-        h('div', { class: `stack-part-body render-${p.id}`, draggable: 'true', title: p.note, role: 'button', tabindex: '0', 'aria-label': `Move ${p.name}`, ondragstart: (ev: DragEvent) => startDrag(ev, p.id, index), ondragend: finishDrag }, h('span', {}, p.short)),
+    const entries = state.partIds.map((id, index) => ({ part: parts.find((p) => p.id === id), index })).filter((entry): entry is { part: Part; index: number } => !!entry.part);
+    const snap = (index: number, pos: Placement) => { let best = { ...pos }, distance = 8; state.placements.forEach((o, i) => { if (i === index) return; [{x:o.x,y:o.y-9,r:pos.r},{x:o.x,y:o.y+9,r:pos.r},{x:o.x-14,y:o.y,r:pos.r},{x:o.x+14,y:o.y,r:pos.r}].forEach(c => { const d=Math.hypot(c.x-pos.x,c.y-pos.y); if(d<distance){distance=d;best=c;} }); }); return best; };
+    const pointerDrag = (index: number, ev: PointerEvent) => { if (ev.button !== 0) return; ev.preventDefault(); const canvas=root.querySelector('.vehicle-stack') as HTMLElement,piece=root.querySelector(`[data-part-index="${index}"]`) as HTMLElement;if(!canvas||!piece)return;rememberAssembly();const rect=canvas.getBoundingClientRect();piece.classList.add('moving');const move=(e:PointerEvent)=>{const x=Math.max(3,Math.min(97,(e.clientX-rect.left)/rect.width*100)),y=Math.max(3,Math.min(97,(e.clientY-rect.top)/rect.height*100));state.placements[index]={...state.placements[index],x,y};piece.style.left=`${x}%`;piece.style.top=`${y}%`;};const up=()=>{document.removeEventListener('pointermove',move);state.placements[index]=snap(index,state.placements[index]);saveState();renderPanel();};document.addEventListener('pointermove',move);document.addEventListener('pointerup',up,{once:true}); };
+    const stackNodes = entries.map(({ part:p,index }) => { const pos=state.placements[index]??{x:50,y:50,r:0}; const move=(dx:number,dy:number)=>{rememberAssembly();pos.x=Math.max(3,Math.min(97,pos.x+dx));pos.y=Math.max(3,Math.min(97,pos.y+dy));state.placements[index]=pos;saveState();renderPanel();}; return h('div',{class:`stack-part stack-${p.id} cat-${p.category.toLowerCase()}`,'data-part-index':String(index),style:`left:${pos.x}%;top:${pos.y}%;--rotation:${pos.r}deg`},
+        h('div', { class: `stack-part-body render-${p.id}`, draggable: 'true', title: p.note, role: 'button', tabindex: '0', 'aria-label': `Move ${p.name}`, onpointerdown:(ev:PointerEvent)=>pointerDrag(index,ev), ondragstart: (ev: DragEvent) => startDrag(ev, p.id, index), ondragend: finishDrag }, h('i',{class:'attach-node node-top'}),h('i',{class:'attach-node node-right'}),h('i',{class:'attach-node node-bottom'}),h('i',{class:'attach-node node-left'}),h('span', {}, p.short)),
         h('div', { class: 'stack-callout' }, h('b', {}, p.name), h('small', {}, `${p.mass} t · $${p.cost}M`),
           h('span', {},
-            h('button', { type: 'button', 'aria-label': `Move ${p.name} up`, onclick: () => { if (index < state.partIds.length - 1) [state.partIds[index + 1], state.partIds[index]] = [state.partIds[index], state.partIds[index + 1]]; saveState(); renderPanel(); } }, '↑'),
-            h('button', { type: 'button', 'aria-label': `Move ${p.name} down`, onclick: () => { if (index > 0) [state.partIds[index - 1], state.partIds[index]] = [state.partIds[index], state.partIds[index - 1]]; saveState(); renderPanel(); } }, '↓'),
-            h('button', { type: 'button', 'aria-label': `Remove ${p.name}`, onclick: () => removePart(index) }, '×')))));
-      stackNodes.push(dropZone(visualIndex + 1));
-    });
-    const stack = h('div', { class: 'vehicle-stack', 'aria-label': 'Assembled launch vehicle' },
-      h('div', { class: 'stack-axis' }),
-      ...(entries.length ? stackNodes : [dropZone(0), h('div', { class: 'empty-stack' }, 'Select components to begin assembly')]));
+            h('button',{type:'button',onclick:()=>move(-4,0)},'←'),h('button',{type:'button',onclick:()=>move(0,-4)},'↑'),h('button',{type:'button',onclick:()=>move(0,4)},'↓'),h('button',{type:'button',onclick:()=>move(4,0)},'→'),h('button',{type:'button',onclick:()=>{rememberAssembly();pos.r=(pos.r+90)%360;saveState();renderPanel();}},'↻'),h('button',{type:'button',onclick:()=>removePart(index)},'×')))); });
+    const stack = h('div',{class:'vehicle-stack','aria-label':'Freeform spacecraft assembly canvas',ondragover:(ev:DragEvent)=>ev.preventDefault(),ondrop:(ev:DragEvent)=>dropPart(ev,ev.currentTarget as HTMLElement)},h('div',{class:'stack-axis'}),...(entries.length?stackNodes:[h('div',{class:'empty-stack'},'Drag any component anywhere in this bay')]));
     const missing = readiness();
     const total = sums();
     const thrust = chosen().reduce((sum, p) => sum + (p.id === 'booster' ? 760 : p.id === 'vac' ? 110 : p.id === 'kick' ? 45 : p.id === 'ion' ? .002 : 0), 0);
@@ -318,12 +322,14 @@ export function missionLab(onBack: () => void): HTMLElement {
         h('div', {}, h('dt', {}, 'Estimated thrust'), h('dd', {}, `${fmt(thrust, 1)} kN`)),
         h('div', { class: twr >= 1.15 ? 'nominal' : 'warning' }, h('dt', {}, 'Thrust / weight'), h('dd', {}, fmt(twr, 2))),
         h('div', {}, h('dt', {}, 'Propulsive stages'), h('dd', {}, String(chosen().filter((p) => p.tags.includes('engine')).length)))),
-      h('p', {}, 'Drag parts into any highlighted gap. Click a palette part to add another copy; use the arrows or drag fitted parts to reorder them.'),
+      h('button',{type:'button',class:`symmetry-toggle ${state.symmetry?'active':''}`,'aria-pressed':String(state.symmetry),onclick:()=>{rememberAssembly();state.symmetry=!state.symmetry;saveState();renderPanel();}},h('span',{},'◧│◨'),h('b',{},`SYMMETRY: ${state.symmetry?'ON':'OFF'}`),h('small',{},state.symmetry?'New side parts are mirrored':'Place parts independently')),
+      h('button',{type:'button',class:'assembly-undo',disabled:assemblyHistory.length===0,onclick:()=>{const previous=assemblyHistory.pop();if(previous){state=previous;saveState();renderPanel();}}},'↶ UNDO LAST BUILD ACTION'),
+      h('p', {}, 'Drag any part anywhere in the bay. Attach boosters on either side, rotate structures for satellites and rovers, and add unlimited copies.'),
       h('div', { class: `readiness ${missing.length ? 'not-ready' : ''}` }, h('b', {}, missing.length ? 'FLIGHT HOLD' : 'CONFIGURATION READY'), h('p', {}, missing.length ? `Resolve: ${missing.join(' · ')}` : 'All mission-critical margins are positive.')));
     return panelShell('VEHICLE INTEGRATION', 'Build the flight stack, one component at a time',
       h('div', { class: 'assembly-layout' }, catalogue, h('section', { class: 'stack-bay' }, h('div', { class: 'bay-head' }, h('span', {}, 'LAUNCH VEHICLE CONFIGURATION'), h('span', {}, `${chosen().length} COMPONENTS`)), stack), engineering),
       lesson('What the margins mean', 'Budget is not the only limit. The launch vehicle must lift the wet mass; generation must exceed peak load; and available delta-v must cover the trajectory plus contingency.'),
-      h('div', { class: 'lab-actions' }, labButton('Load engineering baseline', () => { state.partIds = baselineFor(); saveState(); renderPanel(); }), labButton('Proceed to flight', () => changeTab('flight'), true, missing.length > 0)));
+      h('div', { class: 'lab-actions' }, labButton('Load engineering baseline', () => { rememberAssembly(); state.partIds = baselineFor(); state.placements=defaultPlacements(state.partIds); saveState(); renderPanel(); }), labButton('Proceed to flight', () => changeTab('flight'), true, missing.length > 0)));
   }
 
   function flightPanel() {

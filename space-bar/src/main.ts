@@ -78,6 +78,7 @@ function render() {
   app.replaceChildren();
   const view = ({ gate, title, brief, scene, news, build, poll, paper, report, collapse, done, data: dataScreen, shared, lab: () => missionLab(() => go('title')) } as Record<Screen, () => HTMLElement>)[screen]();
   app.append(view);
+  if (!['gate', 'title', 'lab'].includes(screen)) app.append(h('button', { type: 'button', class: 'global-home', onclick: () => go('title'), 'aria-label': uiText('Back to start page', "Retour à la page d'accueil") }, `⌂ ${uiText('Start', 'Accueil')}`));
   (app.querySelector('h1,h2') as HTMLElement | null)?.focus?.({ preventScroll: true });
 }
 
