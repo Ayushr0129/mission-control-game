@@ -187,3 +187,6 @@ kbd { font: .75rem var(--mono); border: 1px solid #666; border-radius: 4px; padd
   .hc-header > div b { font-size: .72rem; }
   .hc-header .hc-back { padding: 9px 8px; }
 }
+
+/* One clear student entry point; every existing mode remains in the drawer. */
+.student-menu{width:min(760px,calc(100% - 28px));margin-inline:auto}.student-start{width:100%;min-height:76px;font-size:clamp(1rem,2.2vw,1.35rem);box-shadow:0 0 0 1px #91ddff55,0 18px 60px #07131b}.student-promise{max-width:680px;margin:14px auto 22px;color:#b5c8d1;font-size:1.02rem;line-height:1.55;text-align:center}.mode-drawer{border:1px solid #365767;background:#081720}.mode-drawer summary{padding:14px;color:#b9ced8;font:700 .75rem var(--mono);letter-spacing:.08em;text-align:center;text-transform:uppercase;cursor:pointer}.mode-drawer[open] summary{border-bottom:1px solid #365767}.mode-drawer .row{padding:14px;justify-content:center}.mode-drawer .btn{font-size:.78rem}@media(max-width:620px){.student-start{min-height:64px}.mode-drawer .row{display:grid}.mode-drawer .btn{width:100%}}
