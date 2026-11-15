@@ -2,6 +2,16 @@
 
 The historical-campaign flight simulation uses SI units throughout: metres, seconds, kilograms, newtons, pascals and radians. The fixed integration step is **0.02 s (50 Hz)**. Rendering may run at any frame rate; elapsed frame time is accumulated and consumed in fixed physics steps.
 
+## Stage B headless ascent
+
+`src/sim/realAscent.ts` is a UI-independent deterministic ascent model. It uses a two-dimensional vertical plane embedded in the existing three-component vector type; the out-of-plane component stays zero. State is Earth-centred inertial position and velocity in SI units. The launch point co-rotates with Earth, with surface velocity computed from rotation period, radius and launch-site latitude.
+
+The integrator is fixed-step fourth-order Runge–Kutta at 0.02 seconds. Every RK4 derivative evaluates gravity, atmosphere, drag, interpolated engine performance, mass flow and body-axis thrust at its intermediate state. Propellant uses the same weighted derivative and spent-stage dry mass is dropped at separation.
+
+The headless pilot has explicit ascent, cutoff/coast and circularization phases. Rocket-specific altitude pitch programs use a closed-loop vertical-speed correction. Circularization is prograde; parking orbit is awarded only when computed periapsis is at least 150 km, apoapsis is not below periapsis and eccentricity is below 0.1.
+
+This model is not connected to the visible game in Stage B. The opt-in `?real=1` flight view belongs to Stage C.
+
 ## Constants
 
 | Constant | Value | Use | Source |
@@ -107,6 +117,22 @@ Energy used to climb against gravity is estimated during positive radial motion 
 
 These values are instructional estimates: they separate two major ascent losses, but do not constitute a complete engine or thermodynamic energy audit.
 
-## Vehicle data
+## Earth–Moon transfer
 
-Dimensions and engine data are stored in `src/data/rockets.ts` and `src/data/parts/index.ts`. Vehicle-specific references are listed in `src/data/sources.ts` and on the in-game Sources & Credits page. The repository currently has no challenge-provided `/data/sources/` directory, so official NASA and manufacturer sources are used directly.
+Stage E uses a two-body patched-conic approximation. Outside the Moon’s sphere of influence the spacecraft follows an Earth-centred Kepler orbit. Inside that sphere it follows a Moon-centred Kepler orbit. This is intentionally not an n-body model.
+
+For a parking-orbit radius `r₁` and the Moon’s orbital semi-major axis `r₂`, the transfer ellipse has:
+
+`aₜ = (r₁ + r₂) / 2`
+
+`ΔvTLI = √(μEarth/r₁) [√(2r₂/(r₁+r₂)) − 1]`
+
+`ttransfer = π √(aₜ³/μEarth)`
+
+The launch-window phase angle is derived from the transfer time and the Moon’s mean orbital rate. During coast, elliptic states are propagated analytically by solving Kepler’s equation. Lunar-orbit insertion compares the actual Moon-relative arrival speed with circular speed `√(μMoon/r)` and subtracts the required braking impulse from remaining delta-v.
+
+The constants for Earth radius and `μ`, Moon radius and `μ`, mean Earth–Moon distance, and Moon sphere-of-influence radius come from the NASA/JPL Planetary Fact Sheet registry described above. Landing uses the existing fixed-step lunar landing model; its outcome, rather than a scripted checkpoint, advances the journey state. Re-entry classification receives its shallow and steep corridor from the selected mission data so an unsourced corridor is never silently invented.
+
+## Vehicle data and provenance
+
+Dimensions and engine data are stored in `src/data/rockets.ts` and `src/data/parts/index.ts`. Audited mission and capability records live in `src/data/truth/`; every non-identity field carries document, location, retrieval date, and verification status. Downloaded source snapshots live in `data/sources/`, and the same registry is visible on the in-game Sources page.

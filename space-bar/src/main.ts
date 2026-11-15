@@ -18,6 +18,8 @@ import { siteOverloadsLink } from './sim/simulate';
 import { missionLab, preferenceControls, uiText } from './missionlab';
 import { historicalCampaign } from './ui/historicalCampaign';
 import { SIMULATION_SOURCES } from './data/sources';
+import { realFlightView } from './ui/realFlightView';
+import { SOURCE_DOCUMENTS, TRUTH_MISSIONS, TRUTH_ROCKETS } from './data/truth';
 import {
   Session, newSession, answer, totalsFor, warningsFor, finishFlight, retry,
   clearLessons, encodeShare, decodeShare, addToBoard, board, daysLeft, survival,
@@ -35,7 +37,7 @@ const roleOwns: Record<Role | 'crew', string> = {
   engineer: 'The spacecraft: strength, reliability, mass and power', scientist: 'What the mission does on arrival', crew: 'Decisions everyone shares',
 };
 
-type Screen = 'gate' | 'title' | 'campaign' | 'brief' | 'scene' | 'news' | 'build' | 'poll' | 'paper' | 'report' | 'collapse' | 'done' | 'data' | 'shared' | 'lab';
+type Screen = 'gate' | 'title' | 'campaign' | 'brief' | 'scene' | 'news' | 'build' | 'poll' | 'paper' | 'report' | 'collapse' | 'done' | 'data' | 'shared' | 'lab' | 'real';
 type Item = { t: 'scene'; qid: string } | { t: 'news'; ev: GameEvent };
 
 const qs = new URLSearchParams(location.search);
@@ -52,7 +54,7 @@ let introSeen = (() => { try { return sessionStorage.getItem('rttm.intro') === '
 let cut: Flight | null = null;
 let timers: number[] = [];
 let sharedView = location.hash.startsWith('#r=') ? decodeShare(location.hash.slice(3)) : null;
-if (sharedView) screen = 'shared'; else if (introSeen || qs.has('quick')) { screen = 'title'; introSeen = true; }
+if (sharedView) screen = 'shared'; else if (qs.has('real')) { screen = 'real'; introSeen = true; } else if (introSeen || qs.has('quick')) { screen = 'title'; introSeen = true; }
 
 // ---- the people we can lose (kept between worlds on purpose)
 interface Fallen { mission: number; crew: Person[]; cause: string; date: string }
@@ -79,9 +81,9 @@ function render() {
   else bd.showWorld();
   document.body.dataset.screen = screen;
   app.replaceChildren();
-  const view = ({ gate, title, campaign: () => historicalCampaign(() => go('title')), brief, scene, news, build, poll, paper, report, collapse, done, data: dataScreen, shared, lab: () => missionLab(() => go('title')) } as Record<Screen, () => HTMLElement>)[screen]();
+  const view = ({ gate, title, campaign: () => historicalCampaign(() => go('title')), brief, scene, news, build, poll, paper, report, collapse, done, data: dataScreen, shared, lab: () => missionLab(() => go('title')), real: () => realFlightView(() => { history.replaceState(null, '', location.pathname); go('title'); }) } as Record<Screen, () => HTMLElement>)[screen]();
   app.append(view);
-  if (!['gate', 'title', 'lab', 'campaign'].includes(screen)) app.append(h('button', { type: 'button', class: 'global-home', onclick: () => go('title'), 'aria-label': uiText('Back to start page', "Retour à la page d'accueil") }, `⌂ ${uiText('Start', 'Accueil')}`));
+  if (!['gate', 'title', 'lab', 'campaign', 'real'].includes(screen)) app.append(h('button', { type: 'button', class: 'global-home', onclick: () => go('title'), 'aria-label': uiText('Back to start page', "Retour à la page d'accueil") }, `⌂ ${uiText('Start', 'Accueil')}`));
   (app.querySelector('h1,h2') as HTMLElement | null)?.focus?.({ preventScroll: true });
 }
 
@@ -203,6 +205,7 @@ function dataScreen() {
     h('div', { class: 'table', role: 'table' }, ...rows.map((r) => h('div', { class: 'trow', role: 'row' },
       h('b', {}, r[0]), h('span', {}, r[1]), h('em', { class: `badge ${r[2]}` }, r[2]), h('span', { class: 'dim' }, r[3])))),
     h('section',{class:'simulation-credits'},h('p',{class:'eyebrow'},'SIMULATOR SOURCES & CREDITS'),h('h3',{},'Where the numbers come from'),h('p',{},'These sources support the vehicle proportions, planetary constants, atmosphere and learning explanations used by the simulator.'),h('div',{class:'source-cards'},...SIMULATION_SOURCES.map(source=>h('article',{},h('b',{},source.subject),h('a',{href:source.url,target:'_blank',rel:'noreferrer'},`${source.publisher} · ${source.title}`),h('span',{},source.usedFor))))),
+    h('section',{class:'simulation-credits'},h('p',{class:'eyebrow'},'AUDITED TRUTH REGISTRY'),h('h3',{},`${TRUTH_ROCKETS.length} vehicles · ${TRUTH_MISSIONS.length} flown missions`),h('p',{},'Every dated or numerical truth-layer field links to one of these documents. Local snapshots make the audit reproducible.'),h('div',{class:'source-cards'},...SOURCE_DOCUMENTS.map(source=>h('article',{},h('b',{},source.title),h('a',{href:source.url,target:'_blank',rel:'noreferrer'},'Open official source'),h('span',{},source.localPath))))),
     h('p', { class: 'fine' }, 'Visuals are original code-generated diagrams based on published dimensions. Earth and Moon imagery is procedural. NASA material is credited to NASA; SpaceX names and vehicle data are credited to SpaceX.'),
     btn('Back', () => go('title')));
 }
