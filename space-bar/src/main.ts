@@ -18,6 +18,7 @@ import { siteOverloadsLink } from './sim/simulate';
 import { missionLab, preferenceControls, uiText } from './missionlab';
 import { historicalCampaign } from './ui/historicalCampaign';
 import { SIMULATION_SOURCES } from './data/sources';
+import { realFlightView } from './ui/realFlightView';
 import {
   Session, newSession, answer, totalsFor, warningsFor, finishFlight, retry,
   clearLessons, encodeShare, decodeShare, addToBoard, board, daysLeft, survival,
@@ -35,7 +36,7 @@ const roleOwns: Record<Role | 'crew', string> = {
   engineer: 'The spacecraft: strength, reliability, mass and power', scientist: 'What the mission does on arrival', crew: 'Decisions everyone shares',
 };
 
-type Screen = 'gate' | 'title' | 'campaign' | 'brief' | 'scene' | 'news' | 'build' | 'poll' | 'paper' | 'report' | 'collapse' | 'done' | 'data' | 'shared' | 'lab';
+type Screen = 'gate' | 'title' | 'campaign' | 'brief' | 'scene' | 'news' | 'build' | 'poll' | 'paper' | 'report' | 'collapse' | 'done' | 'data' | 'shared' | 'lab' | 'real';
 type Item = { t: 'scene'; qid: string } | { t: 'news'; ev: GameEvent };
 
 const qs = new URLSearchParams(location.search);
@@ -52,7 +53,7 @@ let introSeen = (() => { try { return sessionStorage.getItem('rttm.intro') === '
 let cut: Flight | null = null;
 let timers: number[] = [];
 let sharedView = location.hash.startsWith('#r=') ? decodeShare(location.hash.slice(3)) : null;
-if (sharedView) screen = 'shared'; else if (introSeen || qs.has('quick')) { screen = 'title'; introSeen = true; }
+if (sharedView) screen = 'shared'; else if (qs.has('real')) { screen = 'real'; introSeen = true; } else if (introSeen || qs.has('quick')) { screen = 'title'; introSeen = true; }
 
 // ---- the people we can lose (kept between worlds on purpose)
 interface Fallen { mission: number; crew: Person[]; cause: string; date: string }
@@ -79,9 +80,9 @@ function render() {
   else bd.showWorld();
   document.body.dataset.screen = screen;
   app.replaceChildren();
-  const view = ({ gate, title, campaign: () => historicalCampaign(() => go('title')), brief, scene, news, build, poll, paper, report, collapse, done, data: dataScreen, shared, lab: () => missionLab(() => go('title')) } as Record<Screen, () => HTMLElement>)[screen]();
+  const view = ({ gate, title, campaign: () => historicalCampaign(() => go('title')), brief, scene, news, build, poll, paper, report, collapse, done, data: dataScreen, shared, lab: () => missionLab(() => go('title')), real: () => realFlightView(() => { history.replaceState(null, '', location.pathname); go('title'); }) } as Record<Screen, () => HTMLElement>)[screen]();
   app.append(view);
-  if (!['gate', 'title', 'lab', 'campaign'].includes(screen)) app.append(h('button', { type: 'button', class: 'global-home', onclick: () => go('title'), 'aria-label': uiText('Back to start page', "Retour à la page d'accueil") }, `⌂ ${uiText('Start', 'Accueil')}`));
+  if (!['gate', 'title', 'lab', 'campaign', 'real'].includes(screen)) app.append(h('button', { type: 'button', class: 'global-home', onclick: () => go('title'), 'aria-label': uiText('Back to start page', "Retour à la page d'accueil") }, `⌂ ${uiText('Start', 'Accueil')}`));
   (app.querySelector('h1,h2') as HTMLElement | null)?.focus?.({ preventScroll: true });
 }
 

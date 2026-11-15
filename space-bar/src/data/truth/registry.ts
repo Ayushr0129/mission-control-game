@@ -14,6 +14,8 @@ export const SOURCE_DOCUMENTS: readonly SourceDocument[] = [
   { id: 'spacex-fh', title: 'Falcon Heavy', url: 'https://www.spacex.com/vehicles/falcon-heavy/', localPath: 'data/sources/spacex-falcon-heavy.source' },
   { id: 'nasa-shuttle', title: 'The Space Shuttle', url: 'https://www.nasa.gov/reference/the-space-shuttle/', localPath: 'data/sources/nasa-space-shuttle.source' },
   { id: 'spacex-starship', title: 'Starship', url: 'https://www.spacex.com/vehicles/starship/', localPath: 'data/sources/spacex-starship.source' },
+  { id: 'nasa-ussa76', title: 'U.S. Standard Atmosphere 1976', url: 'https://ntrs.nasa.gov/citations/19770009539', localPath: 'docs/PHYSICS.md' },
+  { id: 'physics-equations', title: 'Space Bar Physics Equations', url: 'docs/PHYSICS.md', localPath: 'docs/PHYSICS.md' },
   { id: 'todo', title: 'Unverified data queue', url: 'docs/DATA-TODO.md', localPath: 'docs/DATA-TODO.md' },
 ] as const;
 
