@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import landTopology from 'world-atlas/land-110m.json';
 
 /** deterministic little rng for textures and star placement */
 export function rng(seed: number) { let a = seed; return () => ((a = (a * 1664525 + 1013904223) >>> 0) / 4294967296); }
@@ -16,21 +17,56 @@ function fbm(x: number, y: number, z: number, oct = 4) { let a = 0.5, f = 1, t =
 const mix = (a: number[], b: number[], t: number) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
 const step = (a: number, b: number, x: number) => sm(Math.min(1, Math.max(0, (x - a) / (b - a))));
 
+let earthSurface: HTMLCanvasElement | undefined, moonSurface: HTMLCanvasElement | undefined;
+
+/** Natural Earth coastlines, bundled offline as quantized TopoJSON. */
+function continentMask(w: number, h: number): Uint8ClampedArray {
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const x = c.getContext('2d')!;
+  const { scale, translate } = landTopology.transform;
+  const arcs = landTopology.arcs.map((arc) => {
+    let lon = 0, lat = 0;
+    return arc.map(([dx, dy]) => {
+      lon += dx; lat += dy;
+      return [(lon * scale[0] + translate[0] + 180) / 360 * w, (90 - lat * scale[1] - translate[1]) / 180 * h];
+    });
+  });
+  x.fillStyle = '#fff';
+  for (const geometry of landTopology.objects.land.geometries) for (const polygon of geometry.arcs) {
+    x.beginPath();
+    for (const ring of polygon) {
+      let first = true;
+      for (const index of ring) {
+        const points = index < 0 ? [...arcs[~index]].reverse() : arcs[index];
+        for (const [px, py] of points) {
+          if (first) x.moveTo(px, py); else x.lineTo(px, py);
+          first = false;
+        }
+      }
+      x.closePath();
+    }
+    x.fill('evenodd');
+  }
+  return x.getImageData(0, 0, w, h).data;
+}
+
 export function earthCanvas(): HTMLCanvasElement {
+  if (earthSurface) return earthSurface;
   const W = 1024, H = 512, c = document.createElement('canvas'); c.width = W; c.height = H;
-  const x = c.getContext('2d')!; const img = x.createImageData(W, H);
+  const x = c.getContext('2d')!; const img = x.createImageData(W, H), mask = continentMask(W, H);
   for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
     const lon = (i / W) * 6.2832, lat = (j / H - 0.5) * 3.1416, cl = Math.cos(lat);
     const px = cl * Math.cos(lon) * 2.1, py = Math.sin(lat) * 2.1, pz = cl * Math.sin(lon) * 2.1;
     // warped noise gives coastlines with bays and peninsulas instead of round blobs
     const wx = fbm(px * 1.3 + 5, py * 1.3, pz * 1.3, 3) - 0.5, wy = fbm(px * 1.3, py * 1.3 + 7, pz * 1.3, 3) - 0.5;
-    const h = fbm(px + wx * 1.1, py + wy * 1.1, pz + wx * 0.8, 6) - 0.04 * Math.abs(Math.sin(lat)), land = step(0.5, 0.515, h);
+    const h = fbm(px + wx * 1.1, py + wy * 1.1, pz + wx * 0.8, 6);
+    const mi = Math.max(0, Math.min(W - 1, Math.round(i + wx * 2))), mj = Math.max(0, Math.min(H - 1, Math.round(j + wy * 2)));
+    const land = mask[(mj * W + mi) * 4] / 255;
     const alat = Math.abs(lat);
     // climate by latitude: green tropics, dry belts near 25 degrees, forests, then tundra
     const desert = Math.max(0, 1 - Math.abs(alat - 0.42) / 0.2) * step(0.35, 0.6, fbm(px * 2.6 + 9, py * 2.6, pz * 2.6 + 4, 3));
     const tundra = step(0.85, 1.05, alat);
-    let col = mix([6, 24, 66], [14, 58, 118], step(0.2, 0.5, h));                  // ocean, deep to shallow
-    col = mix(col, [30, 104, 138], step(0.47, 0.5, h) * (1 - land));             // shallow shelf
+    let col = mix([5, 21, 43], [13, 47, 77], step(0.2, 0.65, h));
     let ground = mix([36, 78, 38], [58, 92, 46], fbm(px * 4, py * 4, pz * 4, 2));  // forest and grassland
     ground = mix(ground, [176, 148, 98], desert);                                    // deserts
     ground = mix(ground, [112, 108, 92], tundra);
@@ -38,35 +74,46 @@ export function earthCanvas(): HTMLCanvasElement {
     col = mix(col, [238, 244, 250], step(1.12, 1.3, alat + (fbm(px * 3, py * 3, pz * 3, 2) - 0.5) * 0.3)); // polar ice
     // clouds: streaks along the latitudes, with storms curling
     const cw = fbm(px * 2 + 21, py * 5, pz * 2 + 3, 3) - 0.5;
-    const cloud = step(0.52, 0.72, fbm(px * 1.6 + cw * 1.4 + 11, py * 3.2 + 5, pz * 1.6 + cw * 1.4, 5)) * 0.85;
+    const cloud = step(0.46, 0.68, fbm(px * 2.6 + cw * 2.4 + 11, py * 5.2 + 5, pz * 2.6 + cw * 2.4, 5)) * 0.9;
     col = mix(col, [250, 252, 255], cloud);
     const k = (j * W + i) * 4; img.data[k] = col[0]; img.data[k + 1] = col[1]; img.data[k + 2] = col[2]; img.data[k + 3] = 255;
   }
-  x.putImageData(img, 0, 0); return c;
+  x.putImageData(img, 0, 0); earthSurface = c; return c;
 }
 export function moonCanvas(): HTMLCanvasElement {
+  if (moonSurface) return moonSurface;
   const W = 1024, H = 512, c = document.createElement('canvas'); c.width = W; c.height = H;
   const x = c.getContext('2d')!; const img = x.createImageData(W, H);
   for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
     const lon = (i / W) * 6.2832, lat = (j / H - 0.5) * 3.1416, cl = Math.cos(lat);
     const px = cl * Math.cos(lon) * 2.4, py = Math.sin(lat) * 2.4, pz = cl * Math.sin(lon) * 2.4;
     let v = 150 + (fbm(px * 2.2, py * 2.2, pz * 2.2, 5) - 0.5) * 90;
-    v -= step(0.55, 0.68, fbm(px * 0.9 + 3, py * 0.9, pz * 0.9 + 8, 3)) * 46; // dark maria
+    v -= step(0.42, 0.6, fbm(px * 0.9 + 3, py * 0.9, pz * 0.9 + 8, 3)) * 55; // broad basalt maria
     const k = (j * W + i) * 4; img.data[k] = v; img.data[k + 1] = v; img.data[k + 2] = v * 0.98; img.data[k + 3] = 255;
   }
   x.putImageData(img, 0, 0);
   const r = rng(5);
-  for (let n = 0; n < 150; n++) { // a few soft craters, not a polka-dot pattern
-    const cx = r() * W, cy = H * 0.12 + r() * H * 0.76, cr = 3 + r() * r() * 26;
+  for (let n = 0; n < 950; n++) {
+    const cx = r() * W, cy = H * 0.04 + r() * H * 0.92, cr = 1 + r() ** 4 * 19;
+    x.save(); x.translate(cx, cy); x.scale(1 / Math.max(.25, Math.sin(cy / H * Math.PI)), 1); x.translate(-cx, -cy);
     const g = x.createRadialGradient(cx, cy, cr * 0.2, cx, cy, cr); g.addColorStop(0, 'rgba(40,40,44,.35)'); g.addColorStop(0.8, 'rgba(60,60,64,.18)'); g.addColorStop(0.92, 'rgba(235,235,238,.22)'); g.addColorStop(1, 'rgba(235,235,238,0)');
     x.fillStyle = g; x.beginPath(); x.arc(cx, cy, cr, 0, 7); x.fill();
+    x.restore();
   }
-  return c;
+  moonSurface = c; return c;
 }
 /** Sphere with a procedural texture; a real NASA image in public/textures replaces it when present. */
 export function planet(radius: number, canvas: HTMLCanvasElement, url: string, emissive = 0): THREE.Mesh {
   const tex = new THREE.CanvasTexture(canvas); tex.colorSpace = THREE.SRGBColorSpace;
-  const mat = new THREE.MeshStandardMaterial({ map: tex, roughness: 1, emissive: new THREE.Color(emissive), emissiveMap: tex, emissiveIntensity: emissive ? 0.25 : 0 });
+  const mat = new THREE.MeshStandardMaterial({ map: tex, roughness: emissive ? .78 : 1, metalness: 0, emissive: new THREE.Color(emissive), emissiveMap: tex, emissiveIntensity: emissive ? 0.025 : 0,
+    bumpMap: emissive ? null : tex, bumpScale: radius * .002 });
+  // Keep the solar terminator even in scenes with fill lights for the spacecraft.
+  mat.onBeforeCompile = (shader) => {
+    shader.vertexShader = 'varying vec3 solarNormal;\n' + shader.vertexShader;
+    shader.vertexShader = shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nsolarNormal = normalize(mat3(modelMatrix) * normal);');
+    shader.fragmentShader = 'varying vec3 solarNormal;\n' + shader.fragmentShader;
+    shader.fragmentShader = shader.fragmentShader.replace('#include <opaque_fragment>', 'float daylight = smoothstep(-0.16, 0.32, dot(normalize(solarNormal), normalize(vec3(-6.0, 3.5, 4.0))));\noutgoingLight *= mix(0.035, 1.0, daylight);\n#include <opaque_fragment>');
+  };
   new THREE.TextureLoader().load(url, (t) => { t.colorSpace = THREE.SRGBColorSpace; mat.map = t; mat.emissiveMap = t; mat.needsUpdate = true; }, undefined, () => {});
   return new THREE.Mesh(new THREE.SphereGeometry(radius, 96, 64), mat);
 }
@@ -88,9 +135,9 @@ export function atmosphere(radius: number, color = 0x5aa8ff, power = 3.2): THREE
     transparent: true, side: THREE.BackSide, depthWrite: false, blending: THREE.AdditiveBlending,
     uniforms: { c: { value: new THREE.Color(color) }, p: { value: power } },
     vertexShader: 'varying vec3 n; varying vec3 v; void main(){ n = normalize(normalMatrix * normal); vec4 mv = modelViewMatrix * vec4(position,1.0); v = normalize(-mv.xyz); gl_Position = projectionMatrix * mv; }',
-    fragmentShader: 'varying vec3 n; varying vec3 v; uniform vec3 c; uniform float p; void main(){ float i = pow(max(0.0, 0.78 - dot(n, v)), p); gl_FragColor = vec4(c, 1.0) * clamp(i, 0.0, 1.0) * 1.6; }',
+    fragmentShader: 'varying vec3 n; varying vec3 v; uniform vec3 c; uniform float p; void main(){ float rim = pow(1.0 - abs(dot(normalize(n), normalize(v))), p); gl_FragColor = vec4(c, rim * 0.36); }',
   });
-  return new THREE.Mesh(new THREE.SphereGeometry(radius * 1.12, 64, 48), mat);
+  return new THREE.Mesh(new THREE.SphereGeometry(radius * 1.018, 64, 48), mat);
 }
 
 export function glowSprite(color = '255,236,200', size = 60): THREE.Sprite {
@@ -125,7 +172,8 @@ export class World {
     this.earth.position.set(2 + 6 * e, -61 + this.lift + 3 * e, -84 - 24 * e);
     this.moon.position.set(-46 + 12 * e, 13 - 2 * e, -190 + 50 * e);
     this.moon.scale.setScalar(1 + 0.4 * e);
-    this.earth.rotation.y = t * 0.02; this.moon.rotation.y = t * 0.006;
+    const motionTime = matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : t;
+    this.earth.rotation.y = motionTime * 0.02; this.moon.rotation.y = motionTime * 0.006;
   }
   /** hero = title and story screens, where the Earth should fill more of the frame */
   update(t: number, progress: number, hero = true) { this.lift += ((hero ? 0 : -9) - this.lift) * 0.05; this.place(progress, t); }

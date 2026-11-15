@@ -12,6 +12,8 @@ export interface Lesson { id: string; runNo: number; cause: Cause; text: string;
 export interface Run {
   no: number; seed: number; events: GameEvent[]; decisions: Decisions;
   outcome?: Outcome; resolution?: RunResolution; livestream?: boolean;
+  /** the autopilot flew at some point in this run (switching it off again does not clear it) */
+  autopilot?: boolean;
   /** how many of the build's interruptions (news, the cabin scare, news) have been shown */
   fired: number;
 }

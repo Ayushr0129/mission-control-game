@@ -1,0 +1,62 @@
+%  Earth Climate Watch: from a 200 km circular parking orbit to a 705 km circular orbit.
+%  Two impulsive burns along the velocity (a Hohmann-style transfer), each found by GMAT's differential corrector.
+%  Assumptions: point-mass Earth (GMAT radius 6378.137 km), instant burns, no plane change: the game's launch is
+%  planar, so the sun-synchronous inclination is set by the launch direction, not by a burn.
+%  Check: the analytic two-burn transfer between these orbits is 0.283 km/s.
+
+Create Spacecraft Sat;
+Sat.DateFormat = UTCGregorian;
+Sat.Epoch = '01 Jan 2027 00:00:00.000';
+Sat.CoordinateSystem = EarthMJ2000Eq;
+Sat.DisplayStateType = Keplerian;
+Sat.SMA = 6578.137;
+Sat.ECC = 0;
+Sat.INC = 98.2;
+Sat.RAAN = 0;
+Sat.AOP = 0;
+Sat.TA = 0;
+
+Create ForceModel EarthPoint;
+EarthPoint.CentralBody = Earth;
+EarthPoint.PrimaryBodies = {Earth};
+EarthPoint.GravityField.Earth.Degree = 0;
+EarthPoint.GravityField.Earth.Order = 0;
+EarthPoint.Drag.AtmosphereModel = None;
+
+Create Propagator Prop;
+Prop.FM = EarthPoint;
+
+Create ImpulsiveBurn Raise1 Raise2;
+Raise1.CoordinateSystem = Local;
+Raise1.Origin = Earth;
+Raise1.Axes = VNB;
+Raise2.CoordinateSystem = Local;
+Raise2.Origin = Earth;
+Raise2.Axes = VNB;
+
+Create DifferentialCorrector DC;
+
+Create ReportFile rf;
+rf.Filename = '@OUT@/earth.txt';
+rf.WriteHeaders = true;
+rf.LeftJustify = On;
+rf.ZeroFill = Off;
+
+Create Variable dv_raise1 dv_raise2 final_alt_km final_ecc;
+
+BeginMissionSequence;
+Target DC {SolveMode = Solve, ExitMode = SaveAndContinue};
+   Vary DC(Raise1.Element1 = 0.1, {Perturbation = 0.0001, Lower = 0, Upper = 1, MaxStep = 0.05});
+   Maneuver Raise1(Sat);
+   Propagate Prop(Sat) {Sat.Earth.Apoapsis};
+   Achieve DC(Sat.Earth.RMAG = 7083.137, {Tolerance = 0.001});
+   Vary DC(Raise2.Element1 = 0.1, {Perturbation = 0.0001, Lower = 0, Upper = 1, MaxStep = 0.05});
+   Maneuver Raise2(Sat);
+   Achieve DC(Sat.Earth.ECC = 0.0, {Tolerance = 0.00001});
+EndTarget;
+
+dv_raise1 = Raise1.Element1;
+dv_raise2 = Raise2.Element1;
+final_alt_km = Sat.Earth.SMA - 6378.137;
+final_ecc = Sat.Earth.ECC;
+Report rf dv_raise1 dv_raise2 final_alt_km final_ecc;

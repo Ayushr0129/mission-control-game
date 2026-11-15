@@ -2,19 +2,27 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
 const M = {
-  white: new THREE.MeshStandardMaterial({ color: 0xe9eaee, roughness: 0.55, metalness: 0.1 }),
-  gold: new THREE.MeshStandardMaterial({ color: 0xc9a227, roughness: 0.35, metalness: 0.85 }),
+  white: new THREE.MeshStandardMaterial({ color: 0xe5e5df, roughness: 0.68, metalness: 0.05 }),
+  gold: new THREE.MeshStandardMaterial({ color: 0xc39439, roughness: 0.48, metalness: 0.72, flatShading: true }),
   dark: new THREE.MeshStandardMaterial({ color: 0x3b414b, roughness: 0.6, metalness: 0.4 }),
   black: new THREE.MeshStandardMaterial({ color: 0x16181c, roughness: 0.6, metalness: 0.2 }),
   amber: new THREE.MeshStandardMaterial({ color: 0xf5a524, emissive: 0x7a4a00, roughness: 0.4 }),
   blue: new THREE.MeshStandardMaterial({ color: 0x7fb3ff, roughness: 0.5, metalness: 0.3 }),
   red: new THREE.MeshStandardMaterial({ color: 0xb8433a, roughness: 0.6 }),
-  silver: new THREE.MeshStandardMaterial({ color: 0xb9bec7, roughness: 0.3, metalness: 0.8 }),
+  silver: new THREE.MeshStandardMaterial({ color: 0xb9bec7, roughness: 0.42, metalness: 0.65 }),
   bell: new THREE.MeshStandardMaterial({ color: 0x4a4f57, roughness: 0.45, metalness: 0.7, side: THREE.DoubleSide }),
 };
 type Mat = keyof typeof M;
 
 function add(g: THREE.Object3D, geo: THREE.BufferGeometry, m: Mat | THREE.Material, x = 0, y = 0, z = 0): THREE.Mesh {
+  if (m === 'bell' && geo instanceof THREE.CylinderGeometry) {
+    const { radiusTop: rt, radiusBottom: rb, height: h } = geo.parameters;
+    geo.dispose();
+    geo = new THREE.LatheGeometry([
+      new THREE.Vector2(rb, -h / 2), new THREE.Vector2(rb * .82, -h * .28),
+      new THREE.Vector2(rt * .85, h * .15), new THREE.Vector2(rt * .8, h * .36), new THREE.Vector2(rt, h / 2),
+    ], 24);
+  }
   const mesh = new THREE.Mesh(geo, typeof m === 'string' ? M[m] : m); mesh.position.set(x, y, z); g.add(mesh); return mesh;
 }
 const cyl = (rt: number, rb: number, h: number, seg = 32) => new THREE.CylinderGeometry(rt, rb, h, seg);
@@ -25,6 +33,21 @@ function lander(scale: number, tags: Set<string>): THREE.Group {
   add(g, cyl(0.5, 0.55, 0.55, 8), 'gold', 0, 0.55, 0);           // descent stage
   add(g, cyl(0.42, 0.42, 0.5, 8), 'silver', 0, 1.05, 0);         // ascent stage
   add(g, new THREE.BoxGeometry(0.3, 0.2, 0.3), 'dark', 0, 1.4, 0); // hatch
+  // Angular pressure cabin, paired forward windows and quilted descent-stage bays.
+  add(g, new THREE.BoxGeometry(.68, .38, .55), 'silver', 0, 1.12, .13);
+  for (const side of [-1, 1]) {
+    const window = add(g, new THREE.CircleGeometry(.105, 3), 'black', side * .18, 1.2, .412);
+    window.rotation.z = side * .3;
+    add(g, new THREE.BoxGeometry(.24, .32, .12), 'gold', side * .45, .55, .3);
+  }
+  add(g, cyl(.12, .24, .24, 24), 'bell', 0, .15, 0);
+  for (let rung = 0; rung < 5; rung++) add(g, new THREE.BoxGeometry(.2, .018, .025), 'silver', 0, .22 + rung * .13, .58);
+  for (const side of [-1, 1]) add(g, cyl(.012, .012, .65, 6), 'silver', side * .11, .48, .58);
+  for (let bay = 0; bay < 8; bay++) {
+    const a = bay * Math.PI / 4;
+    const panel = add(g, new THREE.BoxGeometry(.34, .38, .025), bay % 3 ? 'gold' : 'black', Math.sin(a) * .51, .55, Math.cos(a) * .51);
+    panel.rotation.y = a;
+  }
   for (let i = 0; i < 4; i++) {
     const a = (i * Math.PI) / 2 + Math.PI / 4;
     const leg = add(g, cyl(0.03, 0.03, 0.8), 'silver', Math.cos(a) * 0.7, 0.3, Math.sin(a) * 0.7);
@@ -51,6 +74,21 @@ function csm(tags: Set<string>): { g: THREE.Group; noseY: number } {
   add(g, cyl(0.6, 0.6, 1.3), 'white', 0, 0.2, 0);       // service module
   add(g, cyl(0.61, 0.61, 0.08), 'dark', 0, 0.55, 0);
   add(g, cyl(0.07, 0.6, 0.95), 'silver', 0, 1.33, 0);    // command module
+  // Service-module radiator panels, quad RCS clusters and capsule windows.
+  for (let i = 0; i < 4; i++) {
+    const a = i * Math.PI / 2;
+    const panel = add(g, new THREE.BoxGeometry(.35, .85, .018), 'silver', Math.sin(a) * .602, .14, Math.cos(a) * .602);
+    panel.rotation.y = a;
+    const rcs = new THREE.Group(); rcs.position.set(Math.sin(a) * .64, .62, Math.cos(a) * .64); rcs.rotation.y = a;
+    add(rcs, new THREE.BoxGeometry(.14, .1, .12), 'silver');
+    for (const side of [-1, 1]) add(rcs, cyl(.025, .045, .1, 10), 'bell', side * .1, 0, 0).rotation.z = Math.PI / 2;
+    g.add(rcs);
+  }
+  for (const side of [-1, 1]) {
+    const window = add(g, new THREE.BoxGeometry(.12, .14, .025), 'black', side * .21, 1.3, .34);
+    window.rotation.x = -.5;
+  }
+  add(g, cyl(.605, .605, .035), 'silver', 0, -.43, 0);
   let noseY = 1.8;
   if (has('cabin-redesign')) add(g, cyl(0.64, 0.64, 0.14), 'gold', 0, 0.9, 0);
   else if (has('cabin-fix')) add(g, cyl(0.62, 0.62, 0.06), 'amber', 0, 0.9, 0);
@@ -127,6 +165,13 @@ function launcher(g: THREE.Group, w: number, tags: Set<string>): number {
     add(g, cyl(0.16 * w, 0.22 * w, 1.2, 12), 'white', Math.cos(a) * 0.86 * w, 1.1, Math.sin(a) * 0.86 * w);
   }
   add(g, cyl(1.0 * w, 1.0 * w, 0.4, 40), 'black', 0, y + 0.2, 0); y += 0.4;             // interstage
+  // Fine stringers at the interstage, tank seams and external cable tunnels.
+  for (let i = 0; i < 32; i++) {
+    const a = i * Math.PI / 16;
+    add(g, cyl(.015, .015, .38, 5), 'silver', Math.sin(a) * 1.006 * w, y - .2, Math.cos(a) * 1.006 * w);
+  }
+  for (const seamY of [1.8, 4.8, 6.4, 8.8]) add(g, cyl(1.003 * w, 1.003 * w, .028, 40), 'silver', 0, seamY, 0);
+  for (const a of [0, Math.PI]) add(g, new THREE.BoxGeometry(.07, 7.8, .045), 'white', Math.sin(a) * w, 4.8, Math.cos(a) * w);
   add(g, cyl(1.0 * w, 1.0 * w, 3.4, 40), 'white', 0, y + 1.7, 0);
   add(g, cyl(1.005 * w, 1.005 * w, 0.35, 40), 'black', 0, y + 2.7, 0); y += 3.4;         // second stage
   add(g, cyl(0.72 * w, 1.0 * w, 0.6, 40), 'white', 0, y + 0.3, 0); y += 0.6;             // taper

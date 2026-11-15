@@ -1,0 +1,139 @@
+%  Apollo 11: trans-lunar injection and both lunar orbit insertion burns, recreated from NASA's published orbits.
+%  Inputs (all from NASA; see src/data/apollo11.ts for the citations):
+%   - Earth parking orbit 100.4 x 98.9 n mi, inclination 32.521 deg, over a spherical Earth of radius 3,443.934 n mi
+%     (Apollo by the Numbers, NASA SP-2000-4029, PDF p. 102).
+%   - Trans-lunar injection ignition 002:44:16.20 after liftoff at 13:32:00 UTC, 16 July 1969 (same page).
+%   - Coast from injection to the middle of the lunar orbit insertion burn: 3.0435 days
+%     (injection 002:50:13.03; insertion 075:49:50.37 lasting 357.53 s; Apollo 11 Mission Report MSC-00171, Table 8.6-II).
+%   - Lunar orbits 169.7 x 60.0 n mi after the first insertion burn, 66.1 x 54.5 n mi after the second (SP-4029 PDF p. 103).
+%  Method: as gmat/moon.script (adapted from GMAT's sample Ex_GivenEpochGoToTheMoon.script): turn the parking orbit
+%  and size the injection so Apollo 11 passes the Moon at the published 60.0 n mi after the published coast; then the
+%  first insertion burn at closest approach sets the far point at 169.7 n mi; two revolutions later the second burn,
+%  at the low point, with along-track and outward parts, sets the published 66.1 x 54.5 n mi orbit.
+%  Simplifications: point masses of Earth, Moon and Sun; instant burns (the real ones lasted 347, 358 and 17 seconds);
+%  Moon radius 1737.4 km. Results in m/s.
+
+Create Spacecraft Sat InitSat;
+Sat.DateFormat = UTCGregorian;
+Sat.Epoch = '16 Jul 1969 16:16:16.200';
+Sat.CoordinateSystem = EarthMJ2000Eq;
+Sat.DisplayStateType = Keplerian;
+Sat.SMA = 6562.718;
+Sat.ECC = 0.0002117;
+Sat.INC = 32.521;
+Sat.RAAN = 45;
+Sat.AOP = 0;
+Sat.TA = 0;
+
+Create ForceModel EarthOnly NearEarth NearMoon;
+EarthOnly.CentralBody = Earth;
+EarthOnly.PointMasses = {Earth};
+EarthOnly.Drag = None;
+NearEarth.CentralBody = Earth;
+NearEarth.PointMasses = {Earth, Sun, Luna};
+NearEarth.Drag = None;
+NearMoon.CentralBody = Luna;
+NearMoon.PointMasses = {Luna, Earth, Sun};
+NearMoon.Drag = None;
+
+Create Propagator EarthOnlyProp NearEarthProp NearMoonProp;
+EarthOnlyProp.FM = EarthOnly;
+EarthOnlyProp.Type = RungeKutta89;
+EarthOnlyProp.MaxStep = 3600;
+NearEarthProp.FM = NearEarth;
+NearEarthProp.Type = RungeKutta89;
+NearEarthProp.MaxStep = 3600;
+NearMoonProp.FM = NearMoon;
+NearMoonProp.Type = RungeKutta89;
+NearMoonProp.MaxStep = 600;
+
+Create CoordinateSystem EarthMoonRot;
+EarthMoonRot.Origin = Earth;
+EarthMoonRot.Axes = ObjectReferenced;
+EarthMoonRot.XAxis = R;
+EarthMoonRot.ZAxis = N;
+EarthMoonRot.Primary = Earth;
+EarthMoonRot.Secondary = Luna;
+
+Create ImpulsiveBurn TLI LOI1 LOI2;
+TLI.CoordinateSystem = Local;
+TLI.Origin = Earth;
+TLI.Axes = VNB;
+TLI.Element1 = 3.13;
+LOI1.CoordinateSystem = Local;
+LOI1.Origin = Luna;
+LOI1.Axes = VNB;
+LOI1.Element1 = -0.85;
+LOI2.CoordinateSystem = Local;
+LOI2.Origin = Luna;
+LOI2.Axes = VNB;
+LOI2.Element1 = -0.05;
+
+Create DifferentialCorrector DC;
+DC.MaximumIterations = 60;
+
+Create ReportFile rf;
+rf.Filename = '@OUT@/apollo11.txt';
+rf.WriteHeaders = true;
+rf.LeftJustify = On;
+rf.ZeroFill = Off;
+
+Create Variable RAAN AOP v_tli dv_tli dv_loi1 dv_loi2 peri_alt_nmi coast_days apo_after_loi1_nmi apo_after_loi2_nmi peri_after_loi2_nmi;
+
+BeginMissionSequence;
+InitSat = Sat;
+
+% Coarse: turn the parking orbit so the transfer's far end points at the Moon
+Target DC {SolveMode = Solve, ExitMode = SaveAndContinue};
+   Vary DC(Sat.RAAN = 45, {Perturbation = 0.00001, MaxStep = 5});
+   Vary DC(Sat.AOP = 0, {Perturbation = 0.00001, MaxStep = 5});
+   Maneuver TLI(Sat);
+   RAAN = Sat.RAAN;
+   AOP = Sat.AOP;
+   Propagate EarthOnlyProp(Sat) {Sat.Earth.Apoapsis, Sat.ElapsedDays = 4.5};
+   Achieve DC(Sat.EarthMoonRot.RA = 0, {Tolerance = 1});
+   Achieve DC(Sat.EarthMoonRot.DEC = 0, {Tolerance = 1});
+EndTarget;
+
+% Fine: parking orbit and injection together, for the published closest approach after the published coast
+Sat = InitSat;
+Target DC {SolveMode = Solve, ExitMode = SaveAndContinue};
+   Vary DC(Sat.RAAN = RAAN, {Perturbation = 0.000001, MaxStep = 2});
+   Vary DC(Sat.AOP = AOP, {Perturbation = 0.000001, MaxStep = 2});
+   Vary DC(TLI.Element1 = TLI.Element1, {Perturbation = 0.0000001, MaxStep = 0.01});
+   Maneuver TLI(Sat);
+   v_tli = Sat.EarthMJ2000Eq.VMAG * 1000;
+   Propagate NearEarthProp(Sat) {Sat.Luna.Periapsis, Sat.ElapsedDays = 6};
+   Achieve DC(Sat.Luna.RMAG = 1848.52, {Tolerance = 0.1});
+   Achieve DC(Sat.ElapsedDays = 3.0435, {Tolerance = 0.0005});
+EndTarget;
+peri_alt_nmi = (Sat.Luna.RMAG - 1737.4) / 1.852;
+coast_days = Sat.ElapsedDays;
+
+% First lunar orbit insertion burn at closest approach: far point at 169.7 n mi
+Target DC {SolveMode = Solve, ExitMode = SaveAndContinue};
+   Vary DC(LOI1.Element1 = -0.85, {Perturbation = 0.00001, MaxStep = 0.1});
+   Maneuver LOI1(Sat);
+   Achieve DC(Sat.Luna.RadApo = 2051.68, {Tolerance = 0.1});
+EndTarget;
+apo_after_loi1_nmi = (Sat.Luna.RadApo - 1737.4) / 1.852;
+
+% Two revolutions later, at the low point: the second burn (along-track and outward parts) sets the 66.1 x 54.5 n mi orbit
+Propagate NearMoonProp(Sat) {Sat.Luna.Apoapsis};
+Propagate NearMoonProp(Sat) {Sat.Luna.Periapsis};
+Propagate NearMoonProp(Sat) {Sat.Luna.Apoapsis};
+Propagate NearMoonProp(Sat) {Sat.Luna.Periapsis};
+Target DC {SolveMode = Solve, ExitMode = SaveAndContinue};
+   Vary DC(LOI2.Element1 = -0.05, {Perturbation = 0.00001, MaxStep = 0.02});
+   Vary DC(LOI2.Element3 = 0, {Perturbation = 0.00001, MaxStep = 0.02});
+   Maneuver LOI2(Sat);
+   Achieve DC(Sat.Luna.RadApo = 1859.82, {Tolerance = 0.1});
+   Achieve DC(Sat.Luna.RadPer = 1838.33, {Tolerance = 0.1});
+EndTarget;
+apo_after_loi2_nmi = (Sat.Luna.RadApo - 1737.4) / 1.852;
+peri_after_loi2_nmi = (Sat.Luna.RadPer - 1737.4) / 1.852;
+
+dv_tli = TLI.Element1 * 1000;
+dv_loi1 = abs(LOI1.Element1) * 1000;
+dv_loi2 = sqrt(LOI2.Element1^2 + LOI2.Element2^2 + LOI2.Element3^2) * 1000;
+Report rf dv_tli v_tli dv_loi1 dv_loi2 peri_alt_nmi coast_days apo_after_loi1_nmi apo_after_loi2_nmi peri_after_loi2_nmi;

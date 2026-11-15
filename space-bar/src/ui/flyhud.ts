@@ -4,9 +4,10 @@ import { OrbitSetup } from '../sim/orbit';
 import { AscentSetup } from '../sim/ascent';
 import { LandingSetup } from '../sim/landing';
 import { FlyControls } from './flycontrols';
+import { uiText } from '../prefs';
 
 /** The overlays for the three flown moments and the landing-site pick. DOM only: the rules live in sim/flight.ts. */
-export type Moment = 'liftoff' | 'orbit' | 'site' | 'landing';
+export type Moment = 'liftoff' | 'orbit' | 'site' | 'landing' | 'tli' | 'coast' | 'corridor' | 'reentry';
 /** on a touch screen there is no keyboard: the hints name the on-screen buttons */
 const touch = () => typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
 export interface Hud { el: HTMLElement; set(v: Record<string, number | string | boolean>): void; remove(): void }
@@ -35,23 +36,33 @@ export function autoLink(layer: HTMLElement, auto: boolean, onToggle: () => void
   layer.append(h('button', { class: 'fly-auto', type: 'button', onclick: (e: Event) => { e.stopPropagation(); onToggle(); } }, auto ? 'Fly it myself' : 'Let the autopilot fly'));
 }
 
-/** Liftoff: the stage's fuel, the height against the target, and the throttle. */
+/** Apollo 11's climb to orbit: 185 km up at 7.79 km/s, reached at 000:11:49. The game's climb is mapped onto it. */
+export const ASCENT_REAL = { km: 185, kms: 7.79, startKms: 0.41, met: 11 * 60 + 49 };
+/** The real-world numbers for a share of the climb: altitude in km, speed in km/s (Earth's spin gives 0.41 at the pad), clock in s. */
+export function ascentReal(frac: number) {
+  const u = Math.max(0, Math.min(1, frac)), R = ASCENT_REAL;
+  return { km: R.km * u, kms: R.startKms + (R.kms - R.startKms) * Math.pow(u, 1.3), met: R.met * u };
+}
+/** Liftoff: the stage's fuel, the altitude and speed against orbit, and the throttle. */
 export function ascentHud(layer: HTMLElement, s: AscentSetup): Hud {
-  const fuel = h('i', { class: 'fill' }), label = h('span', {}, 'First stage');
-  const height = h('b', {}, '0'), thr = h('b', {}, '100');
-  const el = h('div', { class: 'land-readout' },
-    h('div', { class: 'fuel' }, label, h('div', { class: 'fuelrow', role: 'meter', 'aria-label': 'Stage fuel' }, fuel)),
-    h('div', { class: 'height' }, h('span', {}, `Height / ${fmt(s.targetY)}`), height, h('em', {}, 'm')),
-    h('div', { class: 'thr' }, h('span', {}, 'Throttle'), thr, h('em', {}, '%')));
+  const fuel = h('i', { class: 'fill' }), label = h('span', {}, uiText('First stage', 'Premier étage'));
+  const height = h('b', {}, '0'), thr = h('b', {}, '100'), speed = h('b', {}, '0.41'), clock = h('b', { class: 'met' }, '000:00:00');
+  const el = h('div', { class: 'land-readout ascent-readout' },
+    h('div', { class: 'clock' }, h('span', {}, uiText('Mission elapsed time', 'Temps écoulé de mission')), clock),
+    h('div', { class: 'fuel' }, label, h('div', { class: 'fuelrow', role: 'meter', 'aria-label': uiText('Stage fuel', 'Carburant de l’étage') }, fuel)),
+    h('div', { class: 'height' }, h('span', {}, uiText(`Altitude / ${ASCENT_REAL.km}`, `Altitude / ${ASCENT_REAL.km}`)), height, h('em', {}, 'km')),
+    h('div', { class: 'spd' }, h('span', {}, uiText(`Speed / ${ASCENT_REAL.kms}`, `Vitesse / ${ASCENT_REAL.kms}`)), speed, h('em', {}, 'km/s')),
+    h('div', { class: 'thr' }, h('span', {}, uiText('Throttle', 'Poussée')), thr, h('em', {}, '%')));
   layer.append(el);
   return {
     el,
     set(v) {
       const f = Math.max(0, Math.min(1, Number(v.fuel)));
       fuel.style.width = `${f * 100}%`;
-      label.textContent = Number(v.stage) === 2 ? 'Second stage' : f <= 0 ? 'First stage: empty' : 'First stage';
+      label.textContent = Number(v.stage) === 2 ? uiText('Second stage', 'Deuxième étage') : f <= 0 ? uiText('First stage: empty', 'Premier étage : vide') : uiText('First stage', 'Premier étage');
       el.classList.toggle('low', Number(v.stage) === 1 && f < 0.2); el.classList.toggle('dry', Number(v.stage) === 1 && f <= 0);
-      height.textContent = fmt(Math.max(0, Number(v.y)));
+      const r = ascentReal(Number(v.y) / s.targetY);
+      height.textContent = r.km.toFixed(r.km < 10 ? 1 : 0); speed.textContent = r.kms.toFixed(2); clock.textContent = met(r.met);
       thr.textContent = fmt(Number(v.throttle) * 100);
     },
     remove() { el.remove(); },
@@ -77,22 +88,26 @@ export function aimMark(layer: HTMLElement): { set(m: { x: number; y: number; r:
 
 /** Moon orbit: the speed against the band to stop in, and how much of the window is left. */
 export function orbitBurnHud(layer: HTMLElement, s: OrbitSetup): Hud {
-  const from = s.lo - (s.hi - s.lo) * 3, to = s.speed0 + 120, pos = (v: number) => `${Math.max(0, Math.min(1, (v - from) / (to - from))) * 100}%`;
+  // the scale runs from a little past the start speed to a little past the target, whichever way the burn goes
+  const a = Math.min(s.speed0, s.lo), b = Math.max(s.speed0, s.hi), pad = (b - a) * 0.15;
+  const from = a - pad, to = b + pad, pos = (v: number) => `${Math.max(0, Math.min(1, (v - from) / (to - from))) * 100}%`;
+  const km = (v: number) => v.toFixed(2);
+  const goal = s.id === 'tli' ? uiText('Speed to reach the Moon', 'Vitesse pour atteindre la Lune') : s.id === 'tei' ? uiText('Speed to fall home', 'Vitesse pour rentrer') : uiText('Moon orbit speed', 'Vitesse d’orbite lunaire');
   const needle = h('i', { class: 'needle' }), speed = h('b', {}, '0'), left = h('i', { class: 'fill' }), word = h('small', { class: 'hint' }, '');
-  const box = h('div', { class: 'speed' }, h('span', {}, 'Speed'), speed, word);
+  const box = h('div', { class: 'speed' }, h('span', {}, uiText('Speed', 'Vitesse')), speed, h('em', {}, 'km/s'), word);
   const el = h('div', { class: 'land-readout orbit-readout' },
     box,
-    h('div', { class: 'band' }, h('span', {}, `Orbit speed ${fmt(s.lo)} to ${fmt(s.hi)}`),
-      h('div', { class: 'scale', role: 'meter', 'aria-label': 'Speed against orbit speed' }, h('i', { class: 'green', style: `left:${pos(s.lo)};width:calc(${pos(s.hi)} - ${pos(s.lo)})` }), needle)),
-    h('div', { class: 'fuel' }, h('span', {}, 'Window to burn'), h('div', { class: 'fuelrow', role: 'meter', 'aria-label': 'Time left to burn' }, left)));
+    h('div', { class: 'band' }, h('span', {}, `${goal}: ${km(s.lo)} – ${km(s.hi)} km/s`),
+      h('div', { class: 'scale', role: 'meter', 'aria-label': goal }, h('i', { class: 'green', style: `left:${pos(s.lo)};width:calc(${pos(s.hi)} - ${pos(s.lo)})` }), needle)),
+    h('div', { class: 'fuel' }, h('span', {}, uiText('Window to burn', 'Fenêtre de poussée')), h('div', { class: 'fuelrow', role: 'meter', 'aria-label': uiText('Time left to burn', 'Temps restant pour pousser') }, left)));
   layer.append(el);
   return {
     el,
     set(v) {
       const sp = Number(v.speed), inside = sp >= s.lo && sp <= s.hi;
-      speed.textContent = fmt(sp); needle.style.left = pos(sp);
+      speed.textContent = km(sp); needle.style.left = pos(sp);
       box.className = `speed ${inside ? 'safe' : sp < s.lo ? 'must' : ''}`;
-      word.textContent = inside ? 'In the band: let go' : sp < s.lo ? 'Too slow' : 'Too fast';
+      word.textContent = inside ? uiText('In the band: let go', 'Dans la bande : relâchez') : sp < s.lo ? uiText('Too slow', 'Trop lent') : uiText('Too fast', 'Trop rapide');
       const l = Math.max(0, Math.min(1, Number(v.left)));
       left.style.width = `${l * 100}%`; el.classList.toggle('low', l < 0.3);
     },
@@ -208,7 +223,8 @@ export function craftMarks(layer: HTMLElement): { set(m: MarkState): void; remov
       (side.firstElementChild as HTMLElement).textContent = sp < 0.05 ? '•' : right ? '▶' : '◀';
       sideNum.textContent = fmt(sp, 1);
       const falling = m.vy <= 0;
-      down.style.transform = `translate(-50%, ${r + 6}px)`;
+      // beside the craft on the side away from the sideways label, a little lower: the engine flame owns the space below
+      down.style.transform = right ? `translate(calc(-100% - ${r}px), 30%)` : `translate(${r}px, 30%)`;
       down.className = `speed-down ${m.down}`;
       (down.firstElementChild as HTMLElement).textContent = falling ? '▼' : '▲';
       (down.lastElementChild as HTMLElement).textContent = falling ? 'm/s down' : 'm/s up';
@@ -229,4 +245,60 @@ export function sitePick(layer: HTMLElement, sites: SiteChoice[], onPick: (id: S
   }, h('b', {}, x.label), h('span', {}, x.blurb), x.locked && h('small', { class: 'site-why' }, x.locked))));
   layer.append(el);
   (el.querySelector('.site:not([disabled])') as HTMLElement | null)?.focus({ preventScroll: true });
+}
+
+// ---------------------------------------------------------------- the trip: clock, warp, readouts
+/** Mission elapsed time the way NASA wrote it: hours, minutes, seconds, as 075:49:50. */
+export function met(seconds: number): string {
+  const s = Math.max(0, Math.floor(seconds)), h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), x = s % 60;
+  return `${String(h).padStart(3, '0')}:${String(m).padStart(2, '0')}:${String(x).padStart(2, '0')}`;
+}
+export const WARPS = [1, 10, 100, 1000, 10000, 100000];
+/** The clock, the warp control, the speed and distances, and a line comparing the moment with Apollo 11. */
+export function tripHud(layer: HTMLElement, onWarp: (dir: -1 | 1) => void): { set(v: { met: number; warp: number | null; speed: number; dEarth: number; dMoon: number; apollo: string }): void; remove(): void } {
+  const clock = h('b', { class: 'met' }, '000:00:00'), warpEl = h('b', {}, '1×');
+  const slower = h('button', { class: 'ctl warp-btn', type: 'button', 'data-warp': 'slower', 'aria-label': uiText('Slower time warp', 'Accélération plus lente'), onclick: (e: Event) => { e.stopPropagation(); onWarp(-1); } }, h('b', {}, '‹'), h('small', {}, ','));
+  const faster = h('button', { class: 'ctl warp-btn', type: 'button', 'data-warp': 'faster', 'aria-label': uiText('Faster time warp', 'Accélération plus rapide'), onclick: (e: Event) => { e.stopPropagation(); onWarp(1); } }, h('b', {}, '›'), h('small', {}, '.'));
+  const warpBox = h('div', { class: 'warp' }, slower, h('div', {}, h('span', {}, uiText('Time warp', 'Accélération')), warpEl), faster);
+  const speed = h('b', {}, '0'), dE = h('b', {}, '0'), dM = h('b', {}, '0'), apollo = h('p', { class: 'apollo-line' }, '');
+  const top = h('div', { class: 'trip-clock' }, h('span', {}, uiText('Mission elapsed time', 'Temps écoulé de mission')), clock, apollo);
+  const read = h('div', { class: 'land-readout trip-readout' },
+    h('div', {}, h('span', {}, uiText('Speed', 'Vitesse')), speed, h('em', {}, 'km/s')),
+    h('div', {}, h('span', {}, uiText('From Earth', 'De la Terre')), dE, h('em', {}, 'km')),
+    h('div', {}, h('span', {}, uiText('From Moon', 'De la Lune')), dM, h('em', {}, 'km')));
+  layer.append(top, read, warpBox);
+  const n = (x: number) => Math.round(x).toLocaleString('en-US');
+  return {
+    set(v) {
+      clock.textContent = met(v.met);
+      warpBox.hidden = v.warp === null; if (v.warp !== null) warpEl.textContent = `${n(v.warp)}×`;
+      speed.textContent = v.speed.toFixed(2); dE.textContent = n(v.dEarth); dM.textContent = n(v.dMoon);
+      apollo.textContent = v.apollo;
+    },
+    remove() { top.remove(); read.remove(); warpBox.remove(); },
+  };
+}
+
+/** The entry-angle gauge: a needle over a scale with the green corridor. */
+export function corridorHud(layer: HTMLElement, s: { lo: number; hi: number }): Hud {
+  const from = s.lo - 3.5, to = s.hi + 3.5, pos = (v: number) => `${Math.max(0, Math.min(1, (v - from) / (to - from))) * 100}%`;
+  const needle = h('i', { class: 'needle' }), val = h('b', {}, '0'), word = h('small', { class: 'hint' }, '');
+  const box = h('div', { class: 'speed' }, h('span', {}, uiText('Entry angle', 'Angle d’entrée')), val, h('em', {}, '°'), word);
+  const el = h('div', { class: 'land-readout orbit-readout corridor-readout' }, box,
+    h('div', { class: 'band' }, h('span', {}, uiText(`Corridor ${s.lo}° to ${s.hi}°`, `Couloir de ${s.lo}° à ${s.hi}°`)),
+      h('div', { class: 'scale', role: 'meter', 'aria-label': uiText('Entry angle against the corridor', 'Angle d’entrée par rapport au couloir') },
+        h('i', { class: 'green', style: `left:${pos(s.lo)};width:calc(${pos(s.hi)} - ${pos(s.lo)})` }), needle),
+      h('div', { class: 'scale-ends' }, h('small', {}, uiText('steeper: burns up', 'trop raide : brûle')), h('small', {}, uiText('shallower: skips off', 'trop plat : rebondit')))),
+  );
+  layer.append(el);
+  return {
+    el,
+    set(v) {
+      const a = Number(v.angle), inside = a >= s.lo && a <= s.hi;
+      val.textContent = a.toFixed(2); needle.style.left = pos(a);
+      box.className = `speed ${inside ? 'safe' : 'must'}`;
+      word.textContent = inside ? uiText('In the corridor', 'Dans le couloir') : a < s.lo ? uiText('Too steep', 'Trop raide') : uiText('Too shallow', 'Trop plat');
+    },
+    remove() { el.remove(); },
+  };
 }

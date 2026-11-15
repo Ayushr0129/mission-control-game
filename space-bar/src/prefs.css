@@ -1,0 +1,3 @@
+.preference-controls { display: flex; gap: 6px; align-items: center; justify-content: center; margin-top: 10px; }
+.preference-controls button { min-width: 54px; height: 32px; padding: 0 10px; color: #b9c9d1; background: rgba(8,18,24,.72); border: 1px solid #304754; cursor: pointer; font: 650 .62rem var(--mono); letter-spacing: .07em; text-transform: uppercase; }
+.preference-controls button:hover, .preference-controls button:focus-visible { color: #fff; border-color: #f5a524; }

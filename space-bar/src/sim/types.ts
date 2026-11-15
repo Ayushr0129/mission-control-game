@@ -2,7 +2,8 @@ export const PHASES = ['launch', 'coast', 'orbit', 'landing', 'return'] as const
 export type Phase = (typeof PHASES)[number];
 export const ROLES = ['manager', 'engineer', 'navigator', 'scientist'] as const;
 export type Role = (typeof ROLES)[number];
-export type Cause = 'mass' | 'power' | 'comms' | 'hardware' | 'piloting';
+/** abort: the free return home, crew safe, no landing. reentry: the entry corridor missed. */
+export type Cause = 'mass' | 'power' | 'comms' | 'hardware' | 'piloting' | 'abort' | 'reentry';
 
 /** Relative effect points (about -3..+4). Scaled to real units by chapter.scale. */
 export interface Effects {
@@ -75,8 +76,10 @@ export interface Check { kind: Cause; label: string; value: number; limit: numbe
 export interface PhaseResult {
   phase: Phase; reached: boolean; passed: boolean; checks: Check[];
   failProb: number; roll: number | null; stress: Record<'power' | 'comms' | 'hardware', number>;
-  /** how the player flew this phase, for the three flown ones */
+  /** how the player flew this phase: the liftoff, the Moon-orbit and landing moments, and the injection burns on the coasts */
   flown?: Mark | LandingResult;
+  /** taken past without stopping: the Moon orbit and the landing on a free return */
+  skipped?: boolean;
 }
 export interface Outcome {
   success: boolean; failedPhase: Phase | null; cause: Cause | null;
@@ -91,7 +94,17 @@ export type Site = 'flat' | 'rough';
 /** fuelLeft is the share of that try's fuel still in the tank at touchdown, 0..1 */
 export interface LandingResult { landed: boolean; tries: 1 | 2; site: Site; speed: number; fuelLeft: number }
 /** What the player's hands did. A moment not flown yet is simply missing. */
-export interface FlownResult { liftoff?: Mark; orbit?: Mark; landing?: LandingResult }
+export interface FlownResult {
+  liftoff?: Mark; orbit?: Mark; landing?: LandingResult;
+  /** trans-lunar injection, out of Earth orbit (coast phase) */
+  tli?: Mark;
+  /** trans-Earth injection, out of lunar orbit (return phase) */
+  tei?: Mark;
+  /** no burn into Moon orbit: the free return took the ship home */
+  freeReturn?: boolean;
+  /** the entry corridor: the angle the ship met the atmosphere at, degrees, and whether that was survivable */
+  reentry?: { angle: number; ok: boolean };
+}
 /** The phases the player flies. The other two are watched, and keep their dice. */
 export const FLOWN: Phase[] = ['launch', 'orbit', 'landing'];
 

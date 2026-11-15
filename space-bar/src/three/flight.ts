@@ -2,12 +2,18 @@ import * as THREE from 'three';
 import { Ending, phaseNames } from '../data/endings';
 import { Cause, FlownResult, Mark, Outcome, Phase, PHASES, Site } from '../sim/types';
 import { AUTOPILOT } from '../sim/flight';
-import { OrbitBurn, OrbitSetup, gradeOrbit, inBand, offBackwards, orbitOver, orbitPilot, startOrbit as startOrbitBurn, stepOrbit } from '../sim/orbit';
+import { BurnId, OrbitBurn, OrbitSetup, gradeOrbit, inBand, offTarget, orbitOver, orbitPilot, startOrbit, stepOrbit } from '../sim/orbit';
+import { CORRIDOR, Corridor, CorridorSetup, corridorAim, corridorIn, corridorOk, corridorOver, corridorPilot, corridorSetup, startCorridor, stepCorridor } from '../sim/corridor';
+import { D, R_E } from '../sim/cr3bp';
+import trip from '../data/trajectory.json';
+import { MapView, PathDraw } from '../ui/mapview';
+import { uiText } from '../prefs';
+import { h } from '../ui/dom';
 import { Craft, LandingSetup, Verdict, advise, carefulPilot, heightOf, hopeless, impactX, judge, onGround, stepCraft } from '../sim/landing';
 import { FlyControls } from '../ui/flycontrols';
 import { LanderView } from './landerview';
 import { FlightAudio, sfx } from '../ui/audio';
-import { Hud, SiteChoice, aimMark, autoLink, coach, controlStrip, craftMarks, flyLayer, flyNote, howTo, landingHud, orbitBurnHud, sitePick } from '../ui/flyhud';
+import { Hud, Moment, SiteChoice, WARPS, aimMark, autoLink, coach, controlStrip, corridorHud, craftMarks, flyLayer, flyNote, howTo, landingHud, orbitBurnHud, sitePick, tripHud } from '../ui/flyhud';
 import { rng, earthCanvas, moonCanvas, planet, atmosphere, glowSprite, starField, flame } from './world';
 import { buildShip } from './ship';
 
@@ -25,6 +31,50 @@ const CRASH_TAIL = 8;   // a crash at the surface is quicker
 const UNDOCK = 2.2;     // the lander separates and turns its legs down before the player takes over
 const ABORT_CLIMB = 2.2;
 const TALK = 7;         // radio after a good landing
+const REENTRY_S = 14;   // seconds of watched re-entry
+const PARKING_KM = 185; // Apollo 11's parking orbit, about 100 n mi
+/** Apollo 11's mission elapsed times, in seconds (SP-4029; Apollo Flight Journal). */
+const TIMES = {
+  orbit: 11 * 60 + 49, tliIgnition: 2 * 3600 + 44 * 60 + 16, tliCutoff: 2 * 3600 + 50 * 60 + 3,
+  loi: 75 * 3600 + 49 * 60 + 50, landing: 102 * 3600 + 45 * 60 + 40, tei: 135 * 3600 + 23 * 60 + 42,
+  entry: 195 * 3600 + 3 * 60 + 6, splash: 195 * 3600 + 18 * 60 + 35,
+};
+type Line = { at: number; en: string; fr: string };
+/** What the coasts teach, by how far along the path the ship is. */
+const WHY: Record<'out' | 'free' | 'home', Line[]> = {
+  out: [
+    { at: 0, en: 'Leaving Earth at 10.8 km/s. From here on the engine is off: gravity does the rest.', fr: 'Départ de la Terre à 10,8 km/s. Le moteur est coupé : la gravité fait le reste.' },
+    { at: 0.25, en: 'The speed is falling. The Earth is still pulling you back the whole way out.', fr: 'La vitesse baisse. La Terre vous retient pendant tout le trajet.' },
+    { at: 0.6, en: 'About 1 km/s at the slowest, then the Moon\'s pull takes over and the speed rises again.', fr: 'Environ 1 km/s au plus lent, puis l\'attraction de la Lune prend le relais et la vitesse remonte.' },
+    { at: 0.82, en: 'The faint loop is the free return: with no more burns, the Moon swings you round and sends you home. Apollo 13 lived because of it.', fr: 'La boucle pâle est le retour libre : sans autre poussée, la Lune vous renvoie vers la Terre. Apollo 13 a survécu grâce à elle.' },
+  ],
+  free: [
+    { at: 0, en: 'No burn at the Moon. The free return is taking you home, as it was designed to.', fr: 'Pas de poussée à la Lune. Le retour libre vous ramène, comme prévu.' },
+    { at: 0.4, en: 'Apollo 13 rode this kind of path home in 1970 after an oxygen tank exploded.', fr: 'Apollo 13 a suivi ce genre de trajectoire en 1970 après l\'explosion d\'un réservoir d\'oxygène.' },
+    { at: 0.75, en: 'Falling back towards the Earth, faster and faster. It will meet the air at about 11 km/s.', fr: 'Retombée vers la Terre, de plus en plus vite. L\'arrivée dans l\'air se fera à environ 11 km/s.' },
+  ],
+  home: [
+    { at: 0, en: 'Heading home. The Moon\'s pull fades and the Earth\'s takes over.', fr: 'Retour vers la Terre. L\'attraction de la Lune faiblit et celle de la Terre l\'emporte.' },
+    { at: 0.5, en: 'Two and a half days of coasting, gaining speed all the way down.', fr: 'Deux jours et demi de vol libre, en accélérant tout le long de la descente.' },
+    { at: 0.82, en: 'Almost home at nearly 11 km/s. One last correction before the atmosphere.', fr: 'Presque arrivé, à près de 11 km/s. Une dernière correction avant l\'atmosphère.' },
+  ],
+};
+const REENTRY_LINES: Line[] = [
+  { at: 0, en: 'Entry interface, 122 km up, 11 km/s.', fr: 'Interface d\'entrée, à 122 km d\'altitude, 11 km/s.' },
+  { at: 0.12, en: 'The heat shield glows at about 2,700 °C. Radio blackout.', fr: 'Le bouclier thermique rougeoie à environ 2 700 °C. Silence radio.' },
+  { at: 0.45, en: 'Out of the blackout. Houston has you.', fr: 'Fin du silence radio. Houston vous entend.' },
+  { at: 0.62, en: 'Drogue parachutes.', fr: 'Parachutes de stabilisation.' },
+  { at: 0.75, en: 'Three main parachutes open.', fr: 'Ouverture des trois parachutes principaux.' },
+  { at: 0.93, en: 'Splashdown.', fr: 'Amerrissage.' },
+];
+type TripMode = 'tli' | 'coast' | 'corridor' | 'reentry';
+interface TripState {
+  mode: TripMode; part: 'card' | 'fly' | 'done' | 'coast' | 'reentry'; path: 'out' | 'free' | 'home';
+  simT: number; warpIdx: number; failAt: number | null; failCause: Cause | null; why: number;
+  metAt: number; metEnd?: number; pathEnd?: number; orbitT: number;
+  burn?: { setup: OrbitSetup; o: OrbitBurn; mark: Mark | null; doneAt: number; engine: number; told: boolean };
+  cs?: CorridorSetup; c?: Corridor; doneAt?: number; engine?: number; told?: boolean;
+}
 const reduce = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 export interface FlightDeps {
@@ -34,7 +84,7 @@ export interface FlightDeps {
   auto(): boolean; setAuto(v: boolean): void;
   /** how the mission stands given what has been flown so far; changes nothing */
   peek(flown: FlownResult): Outcome;
-  orbitSetup(): OrbitSetup;
+  burnSetup(id: BurnId): OrbitSetup;
   landingSetup(marks: { liftoff: Mark; orbit: Mark }, site: Site, attempt: 1 | 2): LandingSetup;
   sites(): SiteChoice[];
   chooseSite(id: Site): void;
@@ -58,7 +108,7 @@ const MOON_R = 20, EARTH_R = 60;
 const ease = (u: number) => { const k = Math.min(1, Math.max(0, u)); return k * k * (3 - 2 * k); };
 const lerp3 = (a: V3, b: V3, u: number, out: THREE.Vector3) => out.set(a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u, a[2] + (b[2] - a[2]) * u);
 
-type Kind = 'watch' | 'orbit' | 'site' | 'landing' | 'talk' | 'fail';
+type Kind = 'watch' | 'orbit' | 'site' | 'landing' | 'talk' | 'fail' | 'map';
 interface Step { kind: Kind; phase: Phase; t0: number; dur: number }
 interface Landing {
   setup: LandingSetup; craft: Craft; attempt: 1 | 2; site: Site;
@@ -87,13 +137,19 @@ export class Flight {
   private flown: FlownResult;
   private step: Step = { kind: 'watch', phase: 'launch', t0: 0, dur: WATCH.launch };
   private layer: HTMLElement | null = null; private hud: Hud | null = null;
-  private orbit: { setup: OrbitSetup; o: OrbitBurn; part: 'card' | 'fly' | 'done'; mark: Mark | null; doneAt: number; engine: number; told: boolean } | null = null;
+  private orbit: { id: BurnId; setup: OrbitSetup; o: OrbitBurn; part: 'card' | 'fly' | 'done'; mark: Mark | null; doneAt: number; engine: number; told: boolean } | null = null;
+  private map: MapView | null = null; private trip: TripState | null = null; private tripHudEl: ReturnType<typeof tripHud> | null = null;
+  private whyEl: HTMLElement | null = null; private skipTo: number | null = null;
   private aimEl: ReturnType<typeof aimMark> | null = null; private nose = 0; // how far the ship is turned from nose-first
   private land: Landing | null = null;
   private view: LanderView | null = null; private controls: FlyControls | null = null;
   private coachEl: { set(active: number): void } | null = null; private marksEl: ReturnType<typeof craftMarks> | null = null;
   private failCause: Cause | null = null; private end: Ending | null = null;
-  private keyHandler = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.preventDefault(); this.skip(); } };
+  private keyHandler = (e: KeyboardEvent) => {
+    if (e.key === 'Escape') { e.preventDefault(); this.skip(); }
+    else if (e.key === ',' || e.key === '<') this.tripWarp(-1);
+    else if (e.key === '.' || e.key === '>') this.tripWarp(1);
+  };
 
   constructor(private host: HTMLElement, private deps: FlightDeps) {
     this.flown = { liftoff: deps.liftoff };
@@ -118,7 +174,7 @@ export class Flight {
 
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
     this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-    this.renderer.toneMapping = THREE.ACESFilmicToneMapping; this.renderer.toneMappingExposure = 1.1;
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping; this.renderer.toneMappingExposure = 1.0;
     view.appendChild(this.renderer.domElement);
     const s = this.scene; s.background = new THREE.Color(0x01020a);
     s.add(starField(2400, 1800, 3, 1.5), starField(300, 1750, 9, 2.4));
@@ -158,7 +214,7 @@ export class Flight {
 
     this.resize(); addEventListener('resize', this.resizeBound);
     this.t0 = this.last = performance.now();
-    if (deps.startAt === 'site') { this.flown.orbit = 'fair'; this.startSite(); } else if (deps.startAt === 'orbit') this.startOrbit(); else this.enter('launch');
+    if (deps.startAt === 'site') { this.flown.orbit = 'fair'; this.startSite(); } else if (deps.startAt === 'orbit') this.startOrbit('loi'); else this.enter('launch');
     this.loop();
   }
 
@@ -166,14 +222,16 @@ export class Flight {
   private begin(kind: Kind, phase: Phase, dur = Infinity) {
     this.step = { kind, phase, t0: performance.now(), dur };
     this.skipBtn.hidden = !(kind === 'watch' || kind === 'talk' || kind === 'fail');
+    if (kind !== 'map') this.hideMap();
     this.lastSub = ''; this.lastRadio = -1;
   }
   /** Start a phase, unless the mission has already failed there. */
   private enter(phase: Phase) {
     const o = this.deps.peek(this.flown);
     if (!o.success && o.failedPhase === phase) { this.fail(phase, o.cause!); return; }
-    if (phase === 'launch' || phase === 'coast' || phase === 'return') this.begin('watch', phase, WATCH[phase]);
-    else if (phase === 'orbit') this.startOrbit();
+    if (phase === 'launch') this.startTli();
+    else if (phase === 'coast' || phase === 'return') this.begin('watch', phase, WATCH[phase]);
+    else if (phase === 'orbit') this.startOrbit('loi');
     else this.startSite();
   }
   private fail(phase: Phase, cause: Cause) {
@@ -190,13 +248,15 @@ export class Flight {
   private skip() {
     const k = this.step.kind;
     if (k === 'watch' || k === 'talk' || k === 'fail') this.step.t0 = performance.now() - this.step.dur * 1000;
+    else if (k === 'map' && this.trip?.mode === 'coast') this.skipTo = this.trip.failAt ?? 1;
+    else if (k === 'map' && this.trip?.mode === 'reentry') this.step.t0 = performance.now() - REENTRY_S * 1000;
   }
-  private get marks() { return { liftoff: this.flown.liftoff ?? 'fair', orbit: this.flown.orbit ?? 'fair' } as { liftoff: Mark; orbit: Mark }; }
+  private get marks() { return { liftoff: this.flown.liftoff ?? 'fair', orbit: this.flown.orbit ?? 'fair', tli: this.flown.tli } as { liftoff: Mark; orbit: Mark; tli?: Mark }; }
 
-  private openLayer(moment: 'orbit' | 'site' | 'landing', prompt: string, warnings: string[] = []) {
+  private openLayer(moment: Moment, prompt: string, warnings: string[] = []) {
     this.clearLayer();
     this.layer = flyLayer(this.root, moment, prompt, warnings);
-    if (moment !== 'site') this.drawAuto();
+    if (moment !== 'site' && moment !== 'coast' && moment !== 'reentry') this.drawAuto();
     return this.layer;
   }
   private drawAuto() {
@@ -204,23 +264,33 @@ export class Flight {
     autoLink(this.layer, this.deps.auto(), () => { this.deps.setAuto(!this.deps.auto()); this.drawAuto(); });
   }
   private clearLayer() {
-    this.hud = null; this.coachEl = null; this.marksEl = null; this.aimEl = null;
+    this.hud = null; this.coachEl = null; this.marksEl = null; this.aimEl = null; this.tripHudEl = null; this.whyEl = null;
     this.controls?.dispose(); this.controls = null;
     this.layer?.remove(); this.layer = null; this.deps.expose?.(null);
   }
 
-  // ------------------------------------------------------------------ Moon orbit: turn the ship around, burn until the speed is in the band
-  private startOrbit() {
-    const setup = this.deps.orbitSetup();
-    this.orbit = { setup, o: startOrbitBurn(setup), part: 'card', mark: null, doneAt: 0, engine: 0, told: false };
+  // ------------------------------------------------------------------ the burns at the Moon: into lunar orbit (loi), and out of it for home (tei)
+  private startOrbit(id: BurnId = 'loi') {
+    const setup = this.deps.burnSetup(id);
+    this.orbit = { id, setup, o: startOrbit(setup), part: 'card', mark: null, doneAt: 0, engine: 0, told: false };
     this.begin('orbit', 'orbit');
-    howTo(this.openLayer('orbit', '', []), 'How to enter Moon orbit', [
-      'Turn the ship around. Point the nose along the arrow, backwards along your path.',
-      'Hold the engine. The speed falls.',
-      'Let go when the speed is inside the green band.',
-    ], [
-      `You arrive at ${setup.speed0.toLocaleString('en-US')}. Orbit speed is ${Math.round(setup.lo).toLocaleString('en-US')} to ${Math.round(setup.hi).toLocaleString('en-US')}.`,
-      'Burning nose first speeds you up. The window to burn is short: watch the bar.',
+    if (id === 'tei' && this.lander && this.separated) this.lander.visible = false; // the lander stays on the Moon
+    const loi = id === 'loi';
+    howTo(this.openLayer('orbit', '', []), loi ? uiText('How to enter Moon orbit', 'Comment entrer en orbite lunaire') : uiText('How to leave the Moon for home', 'Comment quitter la Lune pour rentrer'), loi ? [
+      uiText('Turn the ship around. Point the nose along the arrow, backwards along your path.', 'Retournez le vaisseau. Pointez le nez vers la flèche, vers l’arrière.'),
+      uiText('Hold the engine. The speed falls.', 'Maintenez le moteur. La vitesse baisse.'),
+      uiText('Let go when the speed is inside the green band.', 'Relâchez quand la vitesse est dans la bande verte.'),
+    ] : [
+      uiText('Point the nose forward along your orbit, where the arrow points.', 'Pointez le nez vers l’avant, le long de l’orbite, là où montre la flèche.'),
+      uiText('Hold the engine. The speed rises.', 'Maintenez le moteur. La vitesse monte.'),
+      uiText('Let go inside the green band. The Earth will do the rest.', 'Relâchez dans la bande verte. La Terre fera le reste.'),
+    ], loi ? [
+      uiText(`You arrive at ${setup.speed0.toFixed(2)} km/s. Lunar-orbit speed is ${setup.lo.toFixed(2)} to ${setup.hi.toFixed(2)} km/s.`, `Vous arrivez à ${setup.speed0.toFixed(2)} km/s. La vitesse en orbite lunaire est de ${setup.lo.toFixed(2)} à ${setup.hi.toFixed(2)} km/s.`),
+      uiText('You are behind the Moon. Loss of signal: nobody on Earth can see this burn. Apollo 11 fired it at 075:49:50.', 'Vous êtes derrière la Lune. Perte du signal : personne sur Terre ne voit cette poussée. Apollo 11 l’a faite à 075:49:50.'),
+      uiText('If you do not burn at all, the free return takes you home without landing.', 'Si vous ne poussez pas du tout, le retour libre vous ramène sans atterrir.'),
+    ] : [
+      uiText('Apollo 11 landed at 102:45:40 and spent 21 hours on the Moon before climbing back to orbit.', 'Apollo 11 s’est posé à 102:45:40 et a passé 21 heures sur la Lune avant de remonter en orbite.'),
+      uiText('Behind the Moon again, out of contact. Apollo 11 fired this burn at 135:23:42.', 'De nouveau derrière la Lune, sans contact. Apollo 11 a fait cette poussée à 135:23:42.'),
     ], setup.warnings, () => this.startBurn());
   }
   private startBurn() {
@@ -233,14 +303,19 @@ export class Flight {
     controlStrip(layer, this.controls);
   }
   private updateOrbit(lt: number, dt: number) {
-    const O = this.orbit!, s = O.setup;
+    const O = this.orbit!, s = O.setup, moment = O.id === 'loi' ? 'orbit' : 'tei';
     if (O.part === 'card') {
-      this.deps.expose?.({ moment: 'orbit', part: 'card' });
+      this.deps.expose?.({ moment, part: 'card' });
       if (this.deps.auto() && lt >= 2.5) (this.layer?.querySelector('.howto .start') as HTMLElement | null)?.click();
       return;
     }
     if (O.part === 'done') {
-      if (performance.now() - O.doneAt > 2400) { this.flown.orbit = O.mark!; this.clearLayer(); this.startSite(); }
+      if (performance.now() - O.doneAt > 2400) {
+        this.clearLayer();
+        if (O.id === 'tei') { this.flown.tei = O.mark!; this.startCoast('home'); }
+        else if (this.flown.freeReturn) this.startCoast('free');
+        else { this.flown.orbit = O.mark!; this.startSite(); }
+      }
       return;
     }
     const auto = this.deps.auto() || !this.controls;
@@ -248,22 +323,263 @@ export class Flight {
     const acting = O.o.self ? orbitPilot(O.o, s) : hands;
     O.engine = acting.engine ? acting.throttle : 0;
     O.o = stepOrbit(O.o, hands, dt, s);
-    const off = offBackwards(O.o), w = this.host.clientWidth || innerWidth, hh = this.host.clientHeight || innerHeight;
+    const off = offTarget(O.o, s), w = this.host.clientWidth || innerWidth, hh = this.host.clientHeight || innerHeight;
     this.hud?.set({ speed: O.o.speed, left: Math.max(0, 1 - O.o.t / s.window), throttle: acting.throttle });
     this.coachEl?.set(inBand(O.o, s) ? 2 : Math.abs(off) > 0.3 ? 0 : 1);
     this.tmp.set(0, 0, 0).project(this.camera);
-    this.aimEl?.set({ x: (this.tmp.x * 0.5 + 0.5) * w, y: (-this.tmp.y * 0.5 + 0.5) * hh, r: Math.min(w, hh) * 0.3, guide: -Math.PI / 2, aligned: Math.abs(off) < 0.2, show: true });
-    this.deps.expose?.({ moment: 'orbit', part: 'fly', speed: O.o.speed, lo: s.lo, hi: s.hi, angle: O.o.angle, off, t: O.o.t, window: s.window });
+    this.aimEl?.set({ x: (this.tmp.x * 0.5 + 0.5) * w, y: (-this.tmp.y * 0.5 + 0.5) * hh, r: Math.min(w, hh) * 0.3, guide: s.dir === 'prograde' ? Math.PI / 2 : -Math.PI / 2, aligned: Math.abs(off) < 0.2, show: true });
+    this.deps.expose?.({ moment, part: 'fly', speed: O.o.speed, lo: s.lo, hi: s.hi, angle: O.o.angle, off, t: O.o.t, window: s.window });
     if (O.o.self && !O.told) { O.told = true; if (this.layer) flyNote(this.layer, 'The window is closing. The ship burns by itself.', 'bad'); this.controls?.letGo(); }
     if (orbitOver(O.o, s)) {
+      // no burn at all at the Moon: the free return takes the ship home
+      if (O.id === 'loi' && O.o.burnt === 0) {
+        this.flown.freeReturn = true; O.part = 'done'; O.doneAt = performance.now(); O.engine = 0;
+        flyNote(this.openLayer('orbit', '', []), uiText('No burn. The free return is taking you home.', 'Pas de poussée. Le retour libre vous ramène.'), 'bad');
+        this.deps.expose?.({ moment, part: 'done', freeReturn: true });
+        return;
+      }
       O.mark = auto && !O.o.self ? AUTOPILOT.orbit : gradeOrbit(O.o, s);
       O.part = 'done'; O.doneAt = performance.now(); O.engine = 0;
-      const say = O.o.self ? 'A late burn. It cost fuel.' : auto ? 'Autopilot burn' : O.mark === 'clean' ? 'Clean burn. In orbit.'
+      const say = O.o.self ? 'A late burn. It cost fuel.' : auto ? 'Autopilot burn' : O.mark === 'clean' ? (O.id === 'loi' ? 'Clean burn. In orbit.' : 'Clean burn. Heading home.')
         : O.mark === 'fair' ? 'A little off. It cost fuel.' : O.o.speed > s.hi ? 'Still too fast. It cost fuel.' : 'Too slow. It cost fuel.';
       flyNote(this.openLayer('orbit', '', []), say, O.mark === 'clean' ? 'good' : O.mark === 'fair' ? 'ok' : 'bad');
-      this.deps.expose?.({ moment: 'orbit', part: 'done', mark: O.mark });
+      this.deps.expose?.({ moment, part: 'done', mark: O.mark });
       sfx.thud();
     }
+  }
+
+  // ------------------------------------------------------------------ the trip on the map: Earth orbit, the coasts, the corridor, re-entry
+  /** the map, created on first use; the 3D view stays underneath for the Moon-orbit burns, the landing and failures */
+  private ensureMap() {
+    if (!this.map) { this.map = new MapView(this.root); this.map.el.style.zIndex = '2'; }
+    this.map.el.hidden = false; this.map.resize();
+    return this.map;
+  }
+  private hideMap() { if (this.map) this.map.el.hidden = true; }
+  private tripWarp(dir: -1 | 1) {
+    const T = this.trip; if (!T || T.part !== 'coast') return;
+    T.warpIdx = Math.max(0, Math.min(WARPS.length - 1, T.warpIdx + dir));
+  }
+
+  /** Earth orbit, and the burn that leaves it for the Moon. */
+  private startTli() {
+    const map = this.ensureMap(); map.frame('earth', true);
+    const setup = this.deps.burnSetup('tli');
+    this.trip = { mode: 'tli', part: 'card', path: 'out', simT: 0, warpIdx: 4, failAt: null, failCause: null, why: -1, metAt: TIMES.orbit, orbitT: 0,
+      burn: { setup, o: startOrbit(setup), mark: null, doneAt: 0, engine: 0, told: false } };
+    this.begin('map', 'coast');
+    const layer = this.openLayer('tli', '', []);
+    this.tripHudEl = tripHud(layer, (d) => this.tripWarp(d));
+    howTo(layer, uiText('How to leave Earth orbit', 'Comment quitter l’orbite terrestre'), [
+      uiText('Point the nose forward along your orbit, where the arrow points.', 'Pointez le nez vers l’avant, le long de l’orbite, là où montre la flèche.'),
+      uiText(`Hold the engine. Your speed climbs from ${setup.speed0.toFixed(2)} km/s.`, `Maintenez le moteur. La vitesse monte depuis ${setup.speed0.toFixed(2)} km/s.`),
+      uiText(`Let go inside the green band, around ${setup.target.toFixed(2)} km/s. The orbit stretches out to the Moon.`, `Relâchez dans la bande verte, vers ${setup.target.toFixed(2)} km/s. L’orbite s’étire jusqu’à la Lune.`),
+    ], [
+      uiText('7.8 km/s keeps you falling around the Earth. 10.8 km/s, just under escape speed, carries you out to the Moon.', '7,8 km/s vous fait tomber autour de la Terre. 10,8 km/s, juste sous la vitesse de libération, vous porte jusqu’à la Lune.'),
+      uiText('Apollo 11 fired this burn at 002:44:16. The real burn lasted almost six minutes.', 'Apollo 11 a fait cette poussée à 002:44:16. La vraie poussée a duré presque six minutes.'),
+    ], setup.warnings, () => this.flyTripBurn());
+  }
+  private flyTripBurn() {
+    const B = this.trip!.burn!; this.trip!.part = 'fly';
+    const layer = this.openLayer('tli', '', []);
+    this.tripHudEl = tripHud(layer, (d) => this.tripWarp(d));
+    this.controls = new FlyControls(window);
+    this.hud = orbitBurnHud(layer, B.setup);
+    this.coachEl = coach(layer, [uiText('Turn the nose to the arrow', 'Tournez le nez vers la flèche'), uiText('Hold the engine', 'Maintenez le moteur'), uiText('Let go inside the green band', 'Relâchez dans la bande verte')]);
+    controlStrip(layer, this.controls);
+  }
+  private updateTli(dt: number, lt: number) {
+    const T = this.trip!, B = T.burn!, s = B.setup, map = this.map!;
+    const r = R_E + PARKING_KM, inj = (trip.meta.injectionPhaseDeg * Math.PI) / 180;
+    if (T.part === 'card') {
+      // the ship circles the Earth while the card is up, coming round to the burn point
+      T.orbitT += dt; const a = inj - 1.2 + ((T.orbitT * 0.25) % (Math.PI * 2));
+      this.tripHudEl?.set({ met: TIMES.orbit + T.orbitT * 400, warp: null, speed: s.speed0, dEarth: r, dMoon: D - r, apollo: uiText('Apollo 11 entered Earth orbit at 000:11:49.', 'Apollo 11 est entré en orbite terrestre à 000:11:49.') });
+      map.draw({ paths: [], parking: r, marker: { x: Math.cos(inj) * r, y: Math.sin(inj) * r }, ship: { x: Math.cos(a) * r, y: Math.sin(a) * r, heading: a + Math.PI / 2, burning: 0 } }, dt);
+      this.deps.expose?.({ moment: 'tli', part: 'card' });
+      if (this.deps.auto() && lt >= 2.5) (this.layer?.querySelector('.howto .start') as HTMLElement | null)?.click();
+      return;
+    }
+    const x = Math.cos(inj) * r, y = Math.sin(inj) * r, pro = inj + Math.PI / 2;
+    if (T.part === 'fly') {
+      const auto = this.deps.auto() || !this.controls;
+      const hands = auto ? orbitPilot(B.o, s) : this.controls!.state;
+      const acting = B.o.self ? orbitPilot(B.o, s) : hands;
+      B.engine = acting.engine ? acting.throttle : 0;
+      B.o = stepOrbit(B.o, hands, dt, s);
+      const off = offTarget(B.o, s);
+      this.hud?.set({ speed: B.o.speed, left: Math.max(0, 1 - B.o.t / s.window), throttle: acting.throttle });
+      this.coachEl?.set(inBand(B.o, s) ? 2 : Math.abs(off) > 0.3 ? 0 : 1);
+      this.deps.expose?.({ moment: 'tli', part: 'fly', speed: B.o.speed, lo: s.lo, hi: s.hi, angle: B.o.angle, off, t: B.o.t, window: s.window });
+      if (B.o.self && !B.told) { B.told = true; if (this.layer) flyNote(this.layer, uiText('The window is closing. The ship burns by itself.', 'La fenêtre se referme. Le vaisseau pousse tout seul.'), 'bad'); this.controls?.letGo(); }
+      if (orbitOver(B.o, s)) this.endTripBurn(auto);
+    }
+    // the orbit stretches as the speed rises: Earth's gravity only, until the Moon's path takes over
+    const v = B.o.speed, mu = 398600.4418, apo = 1 / (2 / r - (v * v) / mu) * 2 - r;
+    const reaching = v >= s.lo;
+    this.tripHudEl?.set({ met: TIMES.tliIgnition + B.o.t * 17, warp: null, speed: v, dEarth: r, dMoon: D - r, apollo: uiText('Apollo 11 fired this burn at 002:44:16.', 'Apollo 11 a fait cette poussée à 002:44:16.') });
+    map.frame('earth', false, reaching ? D * 1.3 : Math.min(D * 1.3, Math.max(0, apo) * 1.25));
+    map.draw({
+      paths: reaching ? [{ p: trip.outbound, style: 'plan' }, { p: trip.freeReturnHome, style: 'ghost' }] : [],
+      parking: r, ellipse: reaching || apo <= r ? null : { perigee: r, apogee: apo, angle: inj },
+      ship: { x, y, heading: pro + B.o.angle, burning: B.engine }, aim: T.part === 'fly' ? { heading: pro, ok: Math.abs(offTarget(B.o, s)) < 0.2 } : null,
+    }, dt);
+    if (T.part === 'done' && performance.now() - B.doneAt > 2400) { this.flown.tli = B.mark!; this.startCoast('out'); }
+  }
+  private endTripBurn(auto: boolean) {
+    const T = this.trip!, B = T.burn!, s = B.setup;
+    B.mark = auto && !B.o.self ? AUTOPILOT.orbit : gradeOrbit(B.o, s);
+    T.part = 'done'; B.doneAt = performance.now(); B.engine = 0;
+    const say = B.o.self ? uiText('A late burn. It cost fuel.', 'Une poussée tardive. Cela a coûté du carburant.') : auto ? uiText('Autopilot burn', 'Poussée du pilote automatique')
+      : B.mark === 'clean' ? uiText('Clean burn. On the way to the Moon.', 'Poussée propre. En route vers la Lune.') : B.mark === 'fair' ? uiText('A little off. It cost fuel.', 'Un peu à côté. Cela a coûté du carburant.')
+        : uiText('Well off the target. It cost fuel.', 'Loin de la cible. Cela a coûté du carburant.');
+    const layer = this.openLayer('tli', '', []); this.tripHudEl = tripHud(layer, (d) => this.tripWarp(d));
+    flyNote(layer, say, B.mark === 'clean' ? 'good' : B.mark === 'fair' ? 'ok' : 'bad');
+    this.deps.expose?.({ moment: 'tli', part: 'done', mark: B.mark });
+    sfx.thud();
+  }
+
+  /** A coast on the map, in time warp, with the clock and the "why" lines. */
+  private startCoast(path: 'out' | 'free' | 'home') {
+    const map = this.ensureMap(); map.frame('system');
+    const phase: Phase = path === 'out' ? 'coast' : 'return';
+    const o = this.deps.peek(this.flown);
+    const breaks = !o.success && o.failedPhase === phase && (o.cause === 'hardware' || o.cause === 'power');
+    const p = path === 'out' ? trip.outbound : path === 'free' ? trip.freeReturnHome : trip.homebound;
+    const [m0, m1] = path === 'out' ? [TIMES.tliCutoff, TIMES.loi] : path === 'home' ? [TIMES.tei + 180, TIMES.entry] : [TIMES.loi, TIMES.loi + trip.meta.freeReturnCoastH * 3600];
+    this.trip = { mode: 'coast', part: 'coast', path, simT: 0, warpIdx: 4, failAt: breaks ? 0.45 : null, failCause: breaks ? o.cause : null, why: -1, metAt: m0, metEnd: m1, pathEnd: p.t[p.t.length - 1], orbitT: 0 };
+    this.begin('map', phase);
+    const layer = this.openLayer('coast', '', []);
+    this.tripHudEl = tripHud(layer, (d) => this.tripWarp(d));
+    this.whyEl = h('p', { class: 'trip-why', role: 'status', 'aria-live': 'polite' }, '');
+    layer.append(this.whyEl);
+    this.skipBtn.hidden = false;
+  }
+  private updateCoast(dt: number) {
+    const T = this.trip!, map = this.map!;
+    const p = T.path === 'out' ? trip.outbound : T.path === 'free' ? trip.freeReturnHome : trip.homebound;
+    const end = T.pathEnd!, metEnd = T.metEnd!;
+    // the path's own seconds, stretched to fit the real mission clock between the two events
+    const scale = (metEnd - T.metAt) / end;
+    T.simT = Math.min(end, T.simT + (dt * WARPS[T.warpIdx]) / scale);
+    if (this.skipTo !== null) { T.simT = Math.max(T.simT, this.skipTo * end); this.skipTo = null; }
+    const frac = T.simT / end;
+    if (T.failAt !== null && frac >= T.failAt) { this.hideMap(); this.fail(T.path === 'out' ? 'coast' : 'return', T.failCause!); return; }
+    // where the ship is: interpolate the samples
+    let i = 0, lo = 0, hi = p.t.length - 1;
+    while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (p.t[mid] <= T.simT) lo = mid; else hi = mid; }
+    i = lo; const j = Math.min(p.t.length - 1, i + 1), u = p.t[j] > p.t[i] ? (T.simT - p.t[i]) / (p.t[j] - p.t[i]) : 0;
+    const x = p.x[i] + (p.x[j] - p.x[i]) * u, y = p.y[i] + (p.y[j] - p.y[i]) * u, v = p.v[i] + (p.v[j] - p.v[i]) * u;
+    const heading = Math.atan2(p.y[j] - p.y[i], p.x[j] - p.x[i]);
+    const paths: PathDraw[] = [{ p, style: 'past', to: j }, { p, style: 'plan', from: i }];
+    if (T.path === 'out') paths.push({ p: trip.freeReturnHome, style: 'ghost' });
+    map.draw({ paths, ship: { x, y, heading, burning: 0 } }, dt);
+    const met = T.metAt + T.simT * scale;
+    const apolloNow = T.path === 'free' ? uiText('Apollo 11 never needed this path. Apollo 13 did.', 'Apollo 11 n’a jamais eu besoin de ce chemin. Apollo 13, si.')
+      : T.path === 'out' ? uiText(`Apollo 11: coasting, day ${Math.floor(met / 86400) + 1}.`, `Apollo 11 : en vol libre, jour ${Math.floor(met / 86400) + 1}.`)
+        : uiText(`Apollo 11: heading home, day ${Math.floor(met / 86400) + 1}.`, `Apollo 11 : retour vers la Terre, jour ${Math.floor(met / 86400) + 1}.`);
+    this.tripHudEl?.set({ met, warp: WARPS[T.warpIdx], speed: v, dEarth: Math.hypot(x, y), dMoon: Math.hypot(x - D, y), apollo: apolloNow });
+    const why = WHY[T.path], k = why.findIndex((w, n) => frac >= w.at && (n === why.length - 1 || frac < why[n + 1].at));
+    if (k !== T.why && k >= 0 && this.whyEl) { T.why = k; this.whyEl.textContent = uiText(why[k].en, why[k].fr); }
+    this.deps.expose?.({ moment: 'coast', path: T.path, frac, met, warp: WARPS[T.warpIdx], speed: v });
+    this.audio.update(0.05, 0, 0);
+    if (T.simT >= end) {
+      this.hideMap(); this.clearLayer();
+      if (T.path === 'out') this.enter('orbit'); else this.startCorridor();
+    }
+  }
+
+  /** The last correction before the atmosphere. */
+  private startCorridor() {
+    const map = this.ensureMap(); map.frame('entry', true);
+    const o = this.deps.peek(this.flown);
+    const cs = this.flown.freeReturn ? corridorSetup({ freeReturn: trip.meta.freeReturnEntryAngle }) : corridorSetup({ tei: this.flown.tei ?? 'fair', steep: o.seed % 2 === 0 });
+    this.trip = { mode: 'corridor', part: 'card', path: this.flown.freeReturn ? 'free' : 'home', simT: 0, warpIdx: 0, failAt: null, failCause: null, why: -1, metAt: this.entryMet() - 3600, orbitT: 0, cs, c: startCorridor(cs), doneAt: 0, engine: 0 };
+    this.begin('map', 'return');
+    const layer = this.openLayer('corridor', '', []);
+    this.tripHudEl = tripHud(layer, () => {});
+    howTo(layer, uiText('How to hit the entry corridor', 'Comment viser le couloir d’entrée'), [
+      uiText('The needle shows the angle you will hit the atmosphere at. The arrow shows which way to point: up makes it shallower, down makes it steeper.', 'L’aiguille montre l’angle d’arrivée dans l’atmosphère. La flèche montre où pointer : vers le haut, plus plat ; vers le bas, plus raide.'),
+      uiText('Turn to the arrow and hold the engine. The needle moves.', 'Tournez vers la flèche et maintenez le moteur. L’aiguille bouge.'),
+      uiText('Let go as soon as the needle is in the green. If you leave it alone, guidance makes the correction.', 'Relâchez dès que l’aiguille est dans le vert. Si vous ne touchez à rien, le guidage s’en charge.'),
+    ], [
+      uiText('You meet the air at 11 km/s. Too steep and the heat kills the crew. Too shallow and you skip back into space.', 'Vous touchez l’air à 11 km/s. Trop raide, la chaleur tue l’équipage. Trop plat, vous rebondissez dans l’espace.'),
+      uiText('Apollo 11 entered at -6.48°, at 195:03:06.', 'Apollo 11 est entré à -6,48°, à 195:03:06.'),
+    ], [], () => this.flyCorridor());
+  }
+  private entryMet() { return this.flown.freeReturn ? TIMES.loi + trip.meta.freeReturnCoastH * 3600 : TIMES.entry; }
+  private flyCorridor() {
+    const T = this.trip!; T.part = 'fly';
+    const layer = this.openLayer('corridor', '', []);
+    this.tripHudEl = tripHud(layer, () => {});
+    this.controls = new FlyControls(window);
+    this.hud = corridorHud(layer, T.cs!);
+    this.coachEl = coach(layer, [uiText('Turn to the arrow', 'Tournez vers la flèche'), uiText('Hold the engine', 'Maintenez le moteur'), uiText('Let go in the green', 'Relâchez dans le vert')]);
+    controlStrip(layer, this.controls);
+  }
+  private updateCorridor(dt: number, lt: number) {
+    const T = this.trip!, s = T.cs!, map = this.map!;
+    if (T.part === 'fly') {
+      const auto = this.deps.auto() || !this.controls;
+      const hands = auto ? corridorPilot(T.c!, s) : this.controls!.state;
+      const acting = T.c!.self ? corridorPilot(T.c!, s) : hands;
+      T.engine = acting.engine ? acting.throttle : 0;
+      T.c = stepCorridor(T.c!, hands, dt, s);
+      const aim = corridorAim(T.c, s), off = aim - T.c.ship;
+      this.hud?.set({ angle: T.c.angle });
+      this.coachEl?.set(corridorIn(T.c, s) ? 2 : Math.abs(off) > 0.3 ? 0 : 1);
+      this.deps.expose?.({ moment: 'corridor', part: 'fly', angle: T.c.angle, lo: s.lo, hi: s.hi, ship: T.c.ship, aim, t: T.c.t, window: s.window });
+      if (T.c.self && !T.told) { T.told = true; if (this.layer) flyNote(this.layer, uiText('Guidance is making the correction.', 'Le guidage fait la correction.'), 'ok'); this.controls?.letGo(); }
+      if (corridorOver(T.c, s)) {
+        const ok = corridorOk(T.c, s); T.part = 'done'; T.doneAt = performance.now(); T.engine = 0;
+        this.flown.reentry = { angle: Math.round(T.c.angle * 100) / 100, ok };
+        const layer = this.openLayer('corridor', '', []); this.tripHudEl = tripHud(layer, () => {});
+        flyNote(layer, ok ? uiText('In the corridor.', 'Dans le couloir.') : T.c.angle < s.lo ? uiText('Too steep.', 'Trop raide.') : uiText('Too shallow.', 'Trop plat.'), ok ? 'good' : 'bad');
+        this.deps.expose?.({ moment: 'corridor', part: 'done', ok, angle: T.c.angle });
+        sfx.thud();
+      }
+    } else if (T.part === 'card') {
+      this.deps.expose?.({ moment: 'corridor', part: 'card' });
+      if (this.deps.auto() && lt >= 2.5) (this.layer?.querySelector('.howto .start') as HTMLElement | null)?.click();
+    } else if (T.part === 'done' && performance.now() - T.doneAt! > 2200) {
+      this.clearLayer();
+      if (!this.flown.reentry!.ok) { this.hideMap(); this.fail('return', 'reentry'); return; }
+      this.startReentry(); return;
+    }
+    const c = T.c!;
+    this.tripHudEl?.set({ met: this.entryMet() - 3600 + (T.part === 'card' ? 0 : c.t * 60), warp: null, speed: trip.meta.entrySpeed - 0.4, dEarth: R_E + 40000, dMoon: D, apollo: uiText('Apollo 11 entered the atmosphere at 195:03:06.', 'Apollo 11 est entré dans l’atmosphère à 195:03:06.') });
+    map.draw({ paths: [], entry: { angle: c.angle, lo: s.lo, hi: s.hi, glow: 0, ship: { at: 0.72, nose: c.ship * 0.6, burning: T.engine ?? 0, aim: T.part === 'fly' ? { nose: corridorAim(c, s) * 0.6, ok: Math.abs(corridorAim(c, s) - c.ship) < 0.2 } : null } } }, dt);
+  }
+
+  /** Re-entry, watched: the heat, the blackout, the parachutes, splashdown. */
+  private startReentry() {
+    this.ensureMap().frame('entry');
+    this.trip!.part = 'reentry'; this.trip!.mode = 'reentry';
+    this.begin('map', 'return', REENTRY_S);
+    const layer = this.openLayer('reentry', '', []);
+    this.tripHudEl = tripHud(layer, () => {});
+    this.whyEl = h('p', { class: 'trip-why big', role: 'status', 'aria-live': 'polite' }, '');
+    layer.append(this.whyEl);
+    this.skipBtn.hidden = false;
+  }
+  private updateReentry(dt: number, lt: number) {
+    const map = this.map!, u = Math.min(1, lt / REENTRY_S), T = this.trip!;
+    const lines = REENTRY_LINES, k = lines.findIndex((w, n) => u >= w.at && (n === lines.length - 1 || u < lines[n + 1].at));
+    if (k !== T.why && this.whyEl) { T.why = k; this.whyEl.textContent = uiText(lines[k].en, lines[k].fr); if (k === 1 || k === 4) sfx.radio(); }
+    const glow = u < 0.55 ? Math.sin((u / 0.55) * Math.PI) : 0;
+    const e0 = this.entryMet();
+    this.tripHudEl?.set({ met: e0 + u * (TIMES.splash - TIMES.entry), warp: null, speed: Math.max(0.005, trip.meta.entrySpeed * Math.pow(1 - u, 2.2)), dEarth: R_E + 122 * (1 - u), dMoon: D, apollo: uiText('Apollo 11 splashed down at 195:18:35.', 'Apollo 11 a amerri à 195:18:35.') });
+    map.draw({ paths: [], entry: { angle: this.flown.reentry!.angle, lo: CORRIDOR.lo, hi: CORRIDOR.hi, glow, ship: { at: 0.72 + 0.32 * Math.min(1, u / 0.5), nose: 0, burning: 0 } } }, dt);
+    this.audio.update(glow * 0.6, glow * 0.5, 0);
+    if (lt >= REENTRY_S) { if (!this.fired.stinger) { this.fired.stinger = true; sfx.stinger('win'); } this.finish(); }
+  }
+
+  private updateTrip(dt: number, lt: number) {
+    const T = this.trip; if (!T) return;
+    if (T.mode === 'tli') this.updateTli(dt, lt);
+    else if (T.mode === 'coast') this.updateCoast(dt);
+    else if (T.mode === 'corridor') this.updateCorridor(dt, lt);
+    else this.updateReentry(dt, lt);
   }
 
   // ------------------------------------------------------------------ the landing site
@@ -376,7 +692,7 @@ export class Flight {
     const w = this.host.clientWidth || innerWidth, h = this.host.clientHeight || innerHeight;
     this.renderer.setSize(w, h); this.camera.aspect = w / h; this.camera.updateProjectionMatrix();
     this.fx.width = 160; this.fx.height = Math.max(90, Math.round(160 * h / w));
-    this.view?.resize(w, h);
+    this.view?.resize(w, h); this.map?.resize();
   }
   private loop = () => {
     if (this.done) return;
@@ -388,7 +704,8 @@ export class Flight {
     else if (s.kind === 'orbit') this.updateOrbit(lt, dt);
     else if (s.kind === 'site') { if (this.deps.auto() && lt >= 2) this.pickSite(this.deps.sites().find((x) => !x.locked)?.id ?? 'flat'); }
     else if (s.kind === 'landing') this.updateLanding(lt, dt);
-    else if (s.kind === 'talk') { if (lt >= s.dur) this.enter('return'); }
+    else if (s.kind === 'talk') { if (lt >= s.dur) this.startOrbit('tei'); }
+    else if (s.kind === 'map') { this.updateTrip(dt, lt); return; }
     else if (s.kind === 'fail') { if (lt >= s.dur) { this.finish(); return; } }
     this.frame((now - this.t0) / 1000, (performance.now() - this.step.t0) / 1000);
   };
@@ -409,7 +726,7 @@ export class Flight {
     let u = 1;
     if (kind === 'watch') u = ease(lt / dur);
     else if (kind === 'orbit') { // the Moon arrives as the burn goes on; the card holds it off
-      const O = this.orbit!, base = Math.min(1, O.o.t / 9);
+      const O = this.orbit!, base = O.id === 'tei' ? 1 : Math.min(1, O.o.t / 9);
       u = ease(O.part === 'done' ? Math.max(base, (performance.now() - O.doneAt) / 2000) : base);
     }
     else if (kind === 'landing') u = 0; // the space view only shows the undocking
@@ -601,7 +918,7 @@ export class Flight {
   private teardown() {
     this.clearLayer();
     this.audio.stop(); cancelAnimationFrame(this.raf); removeEventListener('keydown', this.keyHandler); removeEventListener('resize', this.resizeBound);
-    this.view?.dispose(); this.renderer.dispose(); this.root.remove();
+    this.map?.dispose(); this.view?.dispose(); this.renderer.dispose(); this.root.remove();
   }
   /** Leave without finishing: nothing is settled. */
   dispose() { if (this.done) return; this.done = true; this.teardown(); }

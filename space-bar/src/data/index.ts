@@ -8,6 +8,7 @@ export type Content = typeof content;
 export * from './endings';
 export { briefing, eraSources } from './chapter1';
 export { history } from './history';
+export { apollo11Burns, apollo11Explanations } from './apollo11';
 
 const errors = validateContent(content);
 if (errors.length) throw new Error('Content errors:\n' + errors.join('\n'));

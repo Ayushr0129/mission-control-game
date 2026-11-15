@@ -45,8 +45,9 @@ export function warningsFor(events: GameEvent[], tags: string[], phase: Phase): 
 export const massFrac = (t: Totals) => clamp01((t.mass - FLIGHT.lightMass) / (t.capacity - FLIGHT.lightMass));
 
 /** Landing fuel as a multiple of what a careful landing needs: less for a heavy ship, for sloppy burns, and on the second try. */
-export function fuelMargin(t: Totals, marks: { liftoff: Mark; orbit: Mark }, attempt: 1 | 2): number {
-  let margin = Math.max(FLIGHT.marginFloor, lerp(FLIGHT.marginLight, FLIGHT.marginHeavy, massFrac(t)) * (1 - FLIGHT.loss[marks.liftoff] - FLIGHT.loss[marks.orbit]));
+export function fuelMargin(t: Totals, marks: { liftoff: Mark; orbit: Mark; tli?: Mark }, attempt: 1 | 2): number {
+  const loss = FLIGHT.loss[marks.liftoff] + FLIGHT.loss[marks.orbit] + (marks.tli ? FLIGHT.loss[marks.tli] : 0);
+  let margin = Math.max(FLIGHT.marginFloor, lerp(FLIGHT.marginLight, FLIGHT.marginHeavy, massFrac(t)) * (1 - loss));
   if (attempt === 2) margin = Math.max(FLIGHT.retryFloor, margin * FLIGHT.retryFuel);
   return margin;
 }

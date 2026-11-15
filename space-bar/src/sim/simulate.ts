@@ -61,6 +61,8 @@ export function failProbability(ch: Chapter, t: Totals, phase: Phase, hardwareSt
  * The physical checks run in every phase. The coast and the trip home roll dice, because nobody is flying them.
  * Liftoff, Moon orbit and the landing are flown: there the player's hands decide, and a moment that has not
  * been flown yet counts as passed, so the flight can ask "has anything failed so far?" as it goes.
+ * Skipping the Moon-orbit burn takes the free return: no Moon orbit, no landing, the return still rolls its dice, and if
+ * the crew comes home the attempt ends as an abort. A missed entry corridor loses the crew at the end of the return.
  */
 export function simulate(inp: SimInput, flown: FlownResult = {}): Outcome {
   const { chapter: ch } = inp;
@@ -75,6 +77,8 @@ export function simulate(inp: SimInput, flown: FlownResult = {}): Outcome {
     const res: PhaseResult = { phase, reached: failedPhase === null, passed: false, checks: [], failProb: 0, roll: null, stress: st };
     phases.push(res);
     if (failedPhase) return;
+    // on a free return the ship swings past the Moon: nothing is checked or flown there
+    if (flown.freeReturn && (phase === 'orbit' || phase === 'landing')) { res.skipped = true; res.reached = phase === 'orbit'; return; }
     const checks: Check[] = [];
     if (phase === 'launch') {
       checks.push({ kind: 'mass', label: 'Spacecraft mass within launch vehicle capacity', value: totals.mass, limit: totals.capacity, passed: totals.mass <= totals.capacity, unit: 't' });
@@ -99,13 +103,18 @@ export function simulate(inp: SimInput, flown: FlownResult = {}): Outcome {
       res.passed = true;
       return;
     }
+    if (phase === 'coast' && flown.tli) res.flown = flown.tli;
+    if (phase === 'return' && flown.tei) res.flown = flown.tei;
     res.roll = mulberry32(hashSeed(inp.seed, i, 7919))();
     if (res.roll < res.failProb) { failedPhase = phase; cause = 'hardware'; return; }
+    if (phase === 'return' && flown.reentry && !flown.reentry.ok) { failedPhase = phase; cause = 'reentry'; return; }
     res.passed = true;
   });
+  // home safe on the free return, but nobody walked on the Moon
+  if (!failedPhase && flown.freeReturn) { failedPhase = 'orbit'; cause = 'abort'; }
   // fill failProb for failed physical-check phases so reports can show it
   for (const r of phases) {
-    if (r.reached && r.failProb === 0) r.failProb = failProbability(ch, totals, r.phase, r.stress.hardware);
+    if (r.reached && !r.skipped && r.failProb === 0) r.failProb = failProbability(ch, totals, r.phase, r.stress.hardware);
   }
   return { success: failedPhase === null, failedPhase, cause, phases, totals, seed: inp.seed, flown };
 }
