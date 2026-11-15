@@ -44,7 +44,7 @@ export class BuildSite {
     // ground, pad and the ship's stand
     const ground = new THREE.Mesh(new THREE.PlaneGeometry(2400, 2400), new THREE.MeshStandardMaterial({ color: 0x2a2620, roughness: 1 }));
     ground.rotation.x = -Math.PI / 2; s.add(ground);
-    const concrete = new THREE.MeshStandardMaterial({ color: 0x8b8a86, roughness: 0.92 });
+    const concrete = new THREE.MeshStandardMaterial({ color: 0x686c70, roughness: 0.96 });
     const slab = new THREE.Mesh(new THREE.CylinderGeometry(10, 10.6, 0.5, 56), concrete); slab.position.y = 0.25; s.add(slab);
     const ring = new THREE.Mesh(new THREE.TorusGeometry(8.2, 0.07, 6, 80), new THREE.MeshBasicMaterial({ color: 0xf5a524 })); ring.rotation.x = Math.PI / 2; ring.position.y = 0.52; s.add(ring);
     const dark = new THREE.MeshStandardMaterial({ color: 0x23262c, roughness: 0.7, metalness: 0.4 });
@@ -52,8 +52,8 @@ export class BuildSite {
     for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2 + Math.PI / 4; const arm = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.7, 0.35), dark); arm.position.set(Math.cos(a) * 1.5, 1.2, Math.sin(a) * 1.5); s.add(arm); }
 
     // service gantry with swing arms, and a taller one beside it
-    const steel = new THREE.MeshStandardMaterial({ color: 0x8a919c, roughness: 0.6, metalness: 0.55 });
-    const red = new THREE.MeshStandardMaterial({ color: 0xc8402e, roughness: 0.6 });
+    const steel = new THREE.MeshStandardMaterial({ color: 0x727e8b, roughness: 0.72, metalness: 0.45 });
+    const red = new THREE.MeshStandardMaterial({ color: 0x934c40, roughness: 0.78 });
     const tower = (x: number, z: number, h: number, w: number) => {
       for (const dx of [-w / 2, w / 2]) for (const dz of [-w / 2, w / 2]) { const b = new THREE.Mesh(new THREE.BoxGeometry(0.26, h, 0.26), steel); b.position.set(x + dx, h / 2, z + dz); s.add(b); }
       for (let y = 2; y < h; y += 2) {
@@ -156,6 +156,7 @@ export class BuildSite {
 
   /** progress 0..1 is also the time of evening: dusk at the start, floodlit night by the launch poll. */
   update(t: number, progress: number, dtl: number) {
+    const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
     const n = Math.min(1, progress * 0.9 + 0.05); this.skyU.n.value = n;
     (this.scene.fog as THREE.FogExp2).color.setRGB(0.42 - 0.38 * n, 0.29 - 0.26 * n, 0.27 - 0.22 * n);
     this.sun.intensity = 2.6 * (1 - n) + 0.25; this.hemi.intensity = 0.75 - 0.4 * n;
@@ -164,11 +165,11 @@ export class BuildSite {
     this.windows.needsUpdate = false;
     // crane
     this.swing *= 0.985;
-    this.jib.rotation.y = 0.55 + Math.sin(t * 0.22) * 0.18 + this.swing * 0.55;
-    this.hook.position.x = -14 + this.swing * 3; this.hook.scale.y = 1 - this.swing * 0.35;
-    this.glows[0].visible = Math.floor(t * 1.4) % 2 === 0;
+    this.jib.rotation.y = 0.55 + (reduced ? 0 : Math.sin(t * 0.22) * 0.18 + this.swing * 0.55);
+    this.hook.position.x = -14 + (reduced ? 0 : this.swing * 3); this.hook.scale.y = reduced ? 1 : 1 - this.swing * 0.35;
+    this.glows[0].visible = reduced || Math.floor(t * 1.4) % 2 === 0;
     // welding flash and sparks
-    this.weldT += dtl; const w = Math.max(0, 1 - this.weldT * 1.6);
+    this.weldT += dtl; const w = reduced ? 0 : Math.max(0, 1 - this.weldT * 1.6);
     this.weldLight.intensity = w * 140 * (0.7 + Math.random() * 0.6);
     const sm = this.sparks.material as THREE.PointsMaterial; sm.opacity = w;
     if (w > 0) {
@@ -176,7 +177,7 @@ export class BuildSite {
       for (let i = 0; i < this.sparkN; i++) p.setXYZ(i, this.sparkVel[i * 3] * this.weldT * 0.6, this.weldLight.position.y + this.sparkVel[i * 3 + 1] * this.weldT - 6 * this.weldT * this.weldT, 2.6 + this.sparkVel[i * 3 + 2] * this.weldT * 0.6);
       p.needsUpdate = true;
     }
-    this.moon.rotation.y = t * 0.01;
+    this.moon.rotation.y = reduced ? 0 : t * 0.01;
     // lift-off
     if (this.liftT >= 0) {
       this.liftT += dtl; const lt = this.liftT, th = Math.min(1, lt / 1.2);

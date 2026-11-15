@@ -1,0 +1,24 @@
+{
+  "gmat": {
+    "version": "R2026a",
+    "computed": "2026-11-14"
+  },
+  "missions": {
+    "earth": {
+      "burns": {
+        "raise1": 0.1425702976489388,
+        "raise2": 0.1399578515284416
+      },
+      "total": 0.2825281491773804,
+      "script": "gmat/earth.script"
+    },
+    "moon": {
+      "burns": {
+        "TLI": 3.136618893721479,
+        "LOI": 0.4725052805278123
+      },
+      "total": 3.6091241742492914,
+      "script": "gmat/moon.script"
+    }
+  }
+}

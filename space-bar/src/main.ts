@@ -1,7 +1,10 @@
 import './style.css';
 import './flight.css';
 import './feel.css';
-import { content, briefing, eraSources, endingFor, history as realHistory, phaseNames } from './data';
+import './mission.css';
+import './trip.css';
+import { content, briefing, eraSources, endingFor, history as realHistory, phaseNames, apollo11Burns, apollo11Explanations } from './data';
+import apollo11Gmat from './data/apollo11-gmat.json';
 import { crews, missionName, scenes, storyOrder, slotOrder, CABIN, SITE, stationOf, papers, Person } from './data/story';
 import { h, fmt, dateStr } from './ui/dom';
 import { gaugePanel, worldBar, animateWorld, peakUse, monthYear } from './ui/gauges';
@@ -11,7 +14,7 @@ import { Flight } from './three/flight';
 import { FlyControls } from './ui/flycontrols';
 import { Hud, flyLayer, flyNote, autoLink, howTo, coach, controlStrip, ascentHud, aimMark } from './ui/flyhud';
 import { AUTOPILOT, landingFuelPreview } from './sim/flight';
-import { orbitSetup } from './sim/orbit';
+import { burnSetup } from './sim/orbit';
 import { liftoffSetup, startAscent, stepAscent, ascentPilot, ascentDone, gradeAscent, guideAngle, stageDry, thrusting } from './sim/ascent';
 import { landingSetup } from './sim/landing';
 import { siteOverloadsLink } from './sim/simulate';
@@ -20,6 +23,8 @@ import { historicalCampaign } from './ui/historicalCampaign';
 import { SIMULATION_SOURCES } from './data/sources';
 import { realFlightView } from './ui/realFlightView';
 import { SOURCE_DOCUMENTS, TRUTH_MISSIONS, TRUTH_ROCKETS } from './data/truth';
+import { achievements, AchievementId, award, clearAchievements, loadHeld } from './game/achievements';
+import { achievementsPanel, earnedToast, quickRun } from './ui/achievements-ui';
 import {
   Session, newSession, answer, totalsFor, warningsFor, finishFlight, retry,
   clearLessons, encodeShare, decodeShare, addToBoard, board, daysLeft, survival,
@@ -37,7 +42,7 @@ const roleOwns: Record<Role | 'crew', string> = {
   engineer: 'The spacecraft: strength, reliability, mass and power', scientist: 'What the mission does on arrival', crew: 'Decisions everyone shares',
 };
 
-type Screen = 'gate' | 'title' | 'campaign' | 'brief' | 'scene' | 'news' | 'build' | 'poll' | 'paper' | 'report' | 'collapse' | 'done' | 'data' | 'shared' | 'lab' | 'real';
+type Screen = 'gate' | 'title' | 'campaign' | 'brief' | 'scene' | 'news' | 'build' | 'poll' | 'paper' | 'report' | 'collapse' | 'done' | 'data' | 'shared' | 'lab' | 'real' | 'chapters';
 type Item = { t: 'scene'; qid: string } | { t: 'news'; ev: GameEvent };
 
 const qs = new URLSearchParams(location.search);
@@ -53,6 +58,8 @@ const bd = new Backdrop(document.body);
 let introSeen = (() => { try { return sessionStorage.getItem('rttm.intro') === '1' && !qs.has('intro'); } catch { return false; } })();
 let cut: Flight | null = null;
 let timers: number[] = [];
+/** removes the intro's skip keys (Escape, Space, Enter); set only while the intro is playing */
+let stopIntroKeys: (() => void) | null = null;
 let sharedView = location.hash.startsWith('#r=') ? decodeShare(location.hash.slice(3)) : null;
 if (sharedView) screen = 'shared'; else if (qs.has('real')) { screen = 'real'; introSeen = true; } else if (introSeen || qs.has('quick')) { screen = 'title'; introSeen = true; }
 
@@ -66,6 +73,8 @@ const crewNow = () => crews[fallen.length % crews.length];
 const missionNow = () => fallen.length + 1;
 interface FlightRecord { mission: number; crew: Person[]; prev: Meters; ok: boolean; date: string }
 let lastFlight: FlightRecord | null = null;
+/** badges the last flight earned, popped up once on the report and then cleared */
+let freshBadges: AchievementId[] = [];
 
 function seedFromUrl() { const q = qs.get('seed'); return q ? Number(q) : Math.floor(Math.random() * 1e9); }
 function go(next: Screen) { screen = next; render(); window.scrollTo(0, 0); }
@@ -73,6 +82,7 @@ function later(fn: () => void, ms: number) { const id = window.setTimeout(fn, ms
 
 function render() {
   timers.forEach((id) => clearTimeout(id)); timers = [];
+  stopIntroKeys?.();
   document.body.classList.remove('launching');
   if (screen === 'scene' || screen === 'build' || screen === 'poll') { /* these set the build site themselves */ }
   else if (screen === 'brief') bd.showSite(null, 0);
@@ -81,7 +91,7 @@ function render() {
   else bd.showWorld();
   document.body.dataset.screen = screen;
   app.replaceChildren();
-  const view = ({ gate, title, campaign: () => historicalCampaign(() => go('title')), brief, scene, news, build, poll, paper, report, collapse, done, data: dataScreen, shared, lab: () => missionLab(() => go('title')), real: () => realFlightView(() => { history.replaceState(null, '', location.pathname); go('title'); }) } as Record<Screen, () => HTMLElement>)[screen]();
+  const view = ({ gate, title, campaign: () => historicalCampaign(() => go('title')), brief, scene, news, build, poll, paper, report, collapse, done, data: dataScreen, shared, chapters, lab: () => missionLab(() => go('title')), real: () => realFlightView(() => { history.replaceState(null, '', location.pathname); go('title'); }) } as Record<Screen, () => HTMLElement>)[screen]();
   app.append(view);
   if (!['gate', 'title', 'lab', 'campaign', 'real'].includes(screen)) app.append(h('button', { type: 'button', class: 'global-home', onclick: () => go('title'), 'aria-label': uiText('Back to start page', "Retour à la page d'accueil") }, `⌂ ${uiText('Start', 'Accueil')}`));
   (app.querySelector('h1,h2') as HTMLElement | null)?.focus?.({ preventScroll: true });
@@ -149,8 +159,16 @@ function gate() {
     preferenceControls(refreshPreferenceUi, 'title-preferences')));
 }
 
+/** The title's achievements panel, as a modal; closing it puts focus back on the button that opened it. */
+function openAchievements(from: HTMLElement) {
+  const d = achievementsPanel(() => { d.close(); d.remove(); from.focus(); });
+  document.body.append(d); d.showModal();
+}
+
 function title() {
   const lessons = s.lessons.length;
+  const held = loadHeld().length;
+  const achBtn: HTMLButtonElement = btn(`${uiText('Achievements', 'Succès')} ${held}/${achievements.length}`, () => openAchievements(achBtn), 'btn ghost');
   const playing = !introSeen;
   const line = h('div', { class: 'intro-line', 'aria-live': 'polite' });
   const flash = h('div', { class: 'flashfx' });
@@ -160,12 +178,12 @@ function title() {
     h('p', { class: 'tag chapter' }, h('i', {}), uiText(`Chapter ${chapter.id}: ${chapter.title}`, `Chapitre ${chapter.id} : Course vers la Lune`), h('i', {})),
     h('p', { class: 'sub' }, uiText('Three people will climb into a machine you designed.', 'Trois personnes monteront dans une machine que vous avez conçue.')));
   const menu = h('div', { class: 'menu', hidden: playing },
-    h('div', { class: 'row' }, btn(uiText('Open Mission Lab'), () => { sfx.ambient(true); go('lab'); }, 'btn primary big'), btn(uiText('Play historical campaign'), () => { sfx.ambient(true); go('campaign'); }, 'btn ghost'), btn(uiText('Data and sources'), () => go('data'), 'btn ghost')),
-    h('p', { class: 'fine' }, uiText('Engineer a complete mission, assemble the vehicle piece by piece, fly an RCS rendezvous, dock and deploy a scientific payload—or enter the historical Moon-race campaign.')),
+    h('div', { class: 'row' }, btn(uiText('Open Mission Lab'), () => { sfx.ambient(true); go('lab'); }, 'btn primary big'), btn(uiText('Take the job', 'Accepter la mission'), () => { sfx.ambient(true); go('brief'); }, 'btn ghost'), btn(uiText('Play historical campaign'), () => { sfx.ambient(true); go('campaign'); }, 'btn ghost'), achBtn, btn(uiText('Data and sources'), () => go('data'), 'btn ghost')),
+    h('p', { class: 'fine' }, uiText('Engineer a complete mission, assemble the vehicle piece by piece, fly it yourself, earn achievements, dock and deploy a scientific payload—or enter the historical Moon-race campaign.')),
     preferenceControls(refreshPreferenceUi, 'title-preferences'),
-    (lessons > 0 || fallen.length > 0) && h('p', { class: 'fine' },
+    (lessons > 0 || fallen.length > 0 || held > 0) && h('p', { class: 'fine' },
       fallen.length > 0 && `${fallen.length} crew${fallen.length > 1 ? 's' : ''} lost. `, lessons > 0 && `${lessons} lesson${lessons > 1 ? 's' : ''} remembered. `,
-      h('button', { class: 'link', onclick: () => { clearLessons(); fallen = []; saveFallen(); s = newSession(seedFromUrl(), false); render(); } }, 'Forget everything')));
+      h('button', { class: 'link', onclick: () => { clearLessons(); clearAchievements(); fallen = []; saveFallen(); s = newSession(seedFromUrl(), false); render(); } }, 'Forget everything')));
   const skip = h('button', { class: 'skipintro', type: 'button', onclick: () => { bd.skipIntro(); } }, 'Skip intro');
   let fa: FlightAudio | null = null;
   const say = (html: string, cls = '') => { line.className = `intro-line ${cls}`; line.innerHTML = html; void line.offsetWidth; line.classList.add('on'); };
@@ -181,13 +199,15 @@ function title() {
       line.replaceChildren(); flash.classList.remove('on'); flash.classList.add('off'); skip.remove();
       slam.hidden = false; slam.classList.add('in'); sfx.thud(); sfx.stinger('win');
       introSeen = true; try { sessionStorage.setItem('rttm.intro', '1'); } catch { /* ignore */ }
+      stopIntroKeys?.(); // the intro is over: Enter and Space belong to the buttons again
     }
     else if (c === 'menu') { menu.hidden = false; menu.classList.add('in'); (menu.querySelector('.btn.primary') as HTMLElement | null)?.focus({ preventScroll: true }); }
   };
   if (playing) {
     bd.playIntro(cue);
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' || e.key === ' ' || e.key === 'Enter') { e.preventDefault(); bd.skipIntro(); } };
-    addEventListener('keydown', onKey); later(() => removeEventListener('keydown', onKey), 20000);
+    addEventListener('keydown', onKey);
+    stopIntroKeys = () => { removeEventListener('keydown', onKey); stopIntroKeys = null; };
   } else { slam.classList.add('in'); menu.classList.add('in'); }
   return h('main', { class: 'screen titlescreen' }, line, slam, menu, playing && skip, flash);
 }
@@ -198,6 +218,12 @@ function dataScreen() {
     ...eraSources.map((e) => [e.what, e.label, e.status, e.note]),
     ...content.events.map((e) => [`Event: ${e.headline}`, e.source.label, e.source.status, `Historical date ${e.date}`]),
     ['Briefing quote', briefing.source.label, briefing.source.status, ''],
+    ['Apollo 11 orbits and injection speed', 'Apollo by the Numbers, NASA SP-2000-4029, Apollo 11 chapter (PDF pp. 102-103)', 'verified', 'Parking orbit, speed at trans-lunar injection, lunar orbits'],
+    ['Apollo 11 lunar orbit burns', 'Apollo 11 Mission Report, NASA MSC-00171, Table 8.6-II (p. 8-12)', 'verified', 'Measured velocity changes of lunar orbit insertion and circularization'],
+    ['Apollo 11 burns, recomputed', `NASA GMAT ${apollo11Gmat.gmat.version}, ${apollo11Gmat.gmat.computed}`, 'verified', 'gmat/apollo11.script; shown beside NASA\'s figures in the report'],
+    ['The trajectory to the Moon and back', 'Computed for this game: planar Earth-Moon three-body model, RK4 integration (scripts/trajectory.ts)', 'verified', 'Tuned to Apollo 11: 10.84 km/s at injection, 111 km over the Moon, entry at -6.48° and 11.03 km/s after a 59.7 h trip home'],
+    ['Apollo 11 mission clock', 'Apollo 11 Flight Journal and NASA SP-4029 timeline', 'verified', 'Orbit 000:11:49, injection 002:44:16, lunar orbit 075:49:50, landing 102:45:40, trans-Earth 135:23:42, entry 195:03:06, splashdown 195:18:35'],
+    ['Entry corridor', 'Apollo 11 Mission Report, NASA MSC-00171, section 7', 'verified', 'Flight-path angle about -6.5° at 122 km, within a corridor of roughly -5.5° to -7.5°'],
     ['"What really happened"', 'NASA History Office, Apollo 11 mission summary', 'placeholder', 'Facts entered from public knowledge. Verify before judging.'],
   ];
   return shell(h('h2', { tabindex: '-1' }, 'Data and sources'),
@@ -599,7 +625,13 @@ function poll() {
 
 /** Reduced-motion and ?quick=1 players get the autopilot unless they ask to fly (?fly=1, or the link on each moment). */
 let autoFly = instant && !qs.has('fly');
-const expose = (o: Record<string, unknown> | null) => { (window as any).__game.fly = o; };
+/**
+ * Whether a flown moment is being flown right now (not its card, the site choice or a note), as last reported by
+ * the flight scene. An autopilot read only counts against "Hands on the stick" then, so switching it off on a card
+ * before flying does not cost the badge.
+ */
+let flyingNow = false;
+const expose = (o: Record<string, unknown> | null) => { (window as any).__game.fly = o; flyingNow = o?.part === 'fly' || o?.moment === 'landing'; };
 
 /** Open the flight scene. `done` gets what the player flew once it is over. */
 function openFlight(liftoff: Mark, commander: string, done: (flown: FlownResult) => void, startAt?: 'orbit' | 'site') {
@@ -608,9 +640,9 @@ function openFlight(liftoff: Mark, commander: string, done: (flown: FlownResult)
   const site = questions.find((q) => q.id === SITE)!;
   cut = new Flight(holder, {
     tags: totalsFor(s).tags, commander, liftoff, startAt,
-    auto: () => autoFly, setAuto: (v) => { autoFly = v; },
+    auto: () => { if (autoFly && flyingNow) s.current.autopilot = true; return autoFly; }, setAuto: (v) => { autoFly = v; },
     peek: (flown) => peek(s, flown),
-    orbitSetup: () => orbitSetup(chapter, totalsFor(s), s.current.events),
+    burnSetup: (id) => burnSetup(id, chapter, totalsFor(s), s.current.events),
     landingSetup: (marks, where, attempt) => landingSetup(chapter, totalsFor(s), s.current.events, marks, where, attempt),
     sites: () => site.options.map((o) => ({
       id: o.id as Site,
@@ -639,9 +671,10 @@ function doLaunch() {
     over.remove();
     flyLiftoff((liftoff) => openFlight(liftoff, `Cdr. ${surname(crew[0])}`, (flown) => {
       const run = finishFlight(s, flown);
+      freshBadges = award(s, run, quickRun(location.search)); // only here: practice runs never come through
       const ok = run.outcome!.success;
       lastFlight = { mission, crew, prev, ok, date: dateStr(dateAt(chapter, s.meters.day)) };
-      if (!ok) { fallen.push({ mission, crew, cause: endingFor(run.outcome!.cause).headline, date: lastFlight.date }); saveFallen(); }
+      if (!ok && run.outcome!.cause !== 'abort') { fallen.push({ mission, crew, cause: endingFor(run.outcome!.cause).headline, date: lastFlight.date }); saveFallen(); }
       go('paper');
     }));
   }, 3 * 900 * k);
@@ -696,7 +729,8 @@ function flyLiftoff(done: (mark: Mark) => void) {
     'Follow the arrow. It leans over as you climb: turn to stay on it.',
     'When the first stage runs dry, let go and press the engine again. That drops it and lights the next.',
   ], [
-    `Climb to ${fmt(setup.targetY)} m. Staying on the arrow and relighting quickly saves fuel for the landing.`,
+    uiText('Climb to orbit: 185 km up, at 7.79 km/s. Apollo 11 got there 11 minutes 49 seconds after liftoff.', 'Montez en orbite : 185 km d’altitude, à 7,79 km/s. Apollo 11 y est arrivé 11 minutes 49 secondes après le décollage.'),
+    'Staying on the arrow and relighting quickly saves fuel for the landing.',
     ...(setup.twr < 1 ? ['This rocket is over its mass limit.'] : setup.twr < 1.3 ? ['This rocket is heavy. It will climb slowly.'] : []),
   ], setup.warnings, start);
   drawAuto();
@@ -710,6 +744,7 @@ function flyLiftoff(done: (mark: Mark) => void) {
       bd.poseRocket(0, 0, 0, 0); fa.update(0.05, 0, 0);
       return;
     }
+    if (autoFly && !ended) s.current.autopilot = true; // the autopilot is flying this moment
     const hands: Controls = ended || autoFly || !controls ? ascentPilot(a, setup) : controls.state;
     const power = thrusting(a, a.guided ? ascentPilot(a, setup) : hands);
     a = stepAscent(a, hands, dt, setup);
@@ -739,7 +774,8 @@ function flyLiftoff(done: (mark: Mark) => void) {
 // ---------------------------------------------------------------- front page, then the investigation
 function paper() {
   const f = lastFlight!; const run = s.runs[s.runs.length - 1]; const o = run.outcome!; const end = endingFor(o.cause);
-  const p = f.ok ? papers.success : o.cause === 'comms' ? papers.comms : o.cause === 'power' ? papers.power : o.cause === 'piloting' ? papers.crash : papers.vehicle;
+  const home = f.ok || o.cause === 'abort'; // a free return brings the crew home
+  const p = f.ok ? papers.success : o.cause === 'abort' ? papers.abort : o.cause === 'reentry' ? papers.reentry : o.cause === 'comms' ? papers.comms : o.cause === 'power' ? papers.power : o.cause === 'piloting' ? papers.crash : papers.vehicle;
   const bar = worldBar({ ...f.prev, day: s.meters.day }); // the front page is dated the day she flew
   later(() => animateWorld(bar, s.meters), 1400);
   later(() => sfx.news(), 200);
@@ -748,20 +784,49 @@ function paper() {
     h('div', { class: 'mast' }, h('span', {}, 'The Daily Ledger'), h('span', {}, f.date), h('span', {}, missionName(f.mission))),
     h('h2', { class: 'paper-head xl', tabindex: '-1' }, p.head),
     h('p', { class: 'deck' }, p.sub(cn)),
-    h('div', { class: 'faces' }, ...f.crew.map((c) => h('figure', { class: f.ok ? '' : 'lostface' }, avatar(c, 'xl'), h('figcaption', {}, h('b', {}, c.name), h('span', {}, c.title))))),
+    h('div', { class: 'faces' }, ...f.crew.map((c) => h('figure', { class: home ? '' : 'lostface' }, avatar(c, 'xl'), h('figcaption', {}, h('b', {}, c.name), h('span', {}, c.title))))),
     f.ok ? h('p', { class: 'memo' }, `${surname(f.crew[0])} will be remembered for the first words spoken on another world. You designed the way there.`)
+      : o.cause === 'abort' ? h('p', { class: 'memo' }, uiText(`${cn} are safe. Nobody walked on the Moon this time, and the next crew will need another mission.`, `${cn} sont sains et saufs. Personne n’a marché sur la Lune cette fois, et l’équipage suivant aura besoin d’une autre mission.`))
       : h('p', { class: 'memo' }, o.cause === 'piloting' ? `In memory of ${cn}. You built the ship, and your hands were on the controls.` : `In memory of ${cn}. They flew because you decided they should.`),
     h('div', { class: 'row' }, btn(f.ok ? 'Read the full report' : 'Face the investigation', () => go('report'), 'btn primary big'))));
 }
 
 /** How the player flew a phase, for the three that are flown. Null for the two that are watched. */
-function flownLine(p: PhaseResult): string | null {
+function flownLine(p: PhaseResult, all?: FlownResult): string | null {
+  if (p.skipped) return uiText('Skipped: the free return swung the ship past the Moon', 'Sauté : le retour libre a fait passer le vaisseau derrière la Lune');
+  if (p.phase === 'coast') return typeof p.flown === 'string' ? uiText(`Burn to the Moon: ${p.flown}`, `Poussée vers la Lune : ${p.flown}`) : null;
+  if (p.phase === 'return') {
+    const parts: string[] = [];
+    if (typeof p.flown === 'string') parts.push(uiText(`Burn for home: ${p.flown}`, `Poussée de retour : ${p.flown}`));
+    if (all?.reentry) parts.push(uiText(`entered the air at ${all.reentry.angle.toFixed(2)}° (corridor -7.5° to -5.5°)`, `entrée dans l’air à ${all.reentry.angle.toFixed(2)}° (couloir de -7,5° à -5,5°)`));
+    return parts.length ? parts.join(', ') : null;
+  }
   if (!FLOWN.includes(p.phase)) return null;
   const f = p.flown;
   if (f === undefined) return 'Never flown';
   if (typeof f === 'string') return `Flown: ${f}`;
   return f.landed ? `Touched down at ${fmt(f.speed, 1)} m/s with ${fmt(f.fuelLeft * 100)}% fuel left, on the ${f.tries === 1 ? 'first' : 'second'} try`
     : `Came down at ${fmt(f.speed, 1)} m/s`;
+}
+
+/** Apollo 11's big burns: NASA's published figure beside NASA GMAT's recomputation. NASA's figure is always the one stated. */
+function apolloBurns() {
+  const gmat = apollo11Gmat.values as Record<string, number>;
+  const rows = apollo11Burns.map((b) => {
+    const g = gmat[b.gmatKey], diff = ((g - b.nasa.value) / b.nasa.value) * 100;
+    const what = b.nasa.kind === 'dv' ? uiText('velocity change', 'variation de vitesse') : uiText('speed reached', 'vitesse atteinte');
+    return h('tr', {}, h('th', { scope: 'row' }, uiText(b.label, b.labelFr), h('small', {}, what)),
+      h('td', {}, `${fmt(b.nasa.value)} m/s`), h('td', {}, `${fmt(g)} m/s`), h('td', { class: Math.abs(diff) > 5 ? 'wide' : '' }, `${diff > 0 ? '+' : ''}${fmt(diff, 1)}%`));
+  });
+  const notes = apollo11Burns.filter((b) => apollo11Explanations[b.id]).map((b) => h('p', { class: 'fine' }, h('b', {}, `${uiText(b.label, b.labelFr)}. `), uiText(apollo11Explanations[b.id]!.en, apollo11Explanations[b.id]!.fr)));
+  const sources = [...new Set(apollo11Burns.map((b) => `${b.source.label}, ${b.source.page}`))];
+  return h('section', { class: 'apollo-burns' },
+    h('h4', {}, uiText('Apollo 11\'s big burns, checked with NASA GMAT', 'Les grandes poussées d\'Apollo 11, vérifiées avec NASA GMAT')),
+    h('table', {}, h('thead', {}, h('tr', {}, h('th', {}, uiText('Burn', 'Poussée')), h('th', {}, 'NASA'), h('th', {}, `GMAT ${apollo11Gmat.gmat.version}`), h('th', {}, uiText('Difference', 'Écart')))),
+      h('tbody', {}, ...rows)),
+    ...notes,
+    h('p', { class: 'fine' }, uiText(`NASA figures: ${sources.join('; ')}. Recomputed with NASA GMAT ${apollo11Gmat.gmat.version} on ${apollo11Gmat.gmat.computed} (gmat/apollo11.script); GMAT's burns are instant, the real ones lasted seconds to minutes.`,
+      `Chiffres de la NASA : ${sources.join(' ; ')}. Recalculés avec NASA GMAT ${apollo11Gmat.gmat.version} le ${apollo11Gmat.gmat.computed} (gmat/apollo11.script) ; les poussées de GMAT sont instantanées, les vraies duraient de quelques secondes à quelques minutes.`)));
 }
 
 function delta(label: string, v: number, goodUp: boolean) {
@@ -771,6 +836,9 @@ function delta(label: string, v: number, goodUp: boolean) {
 
 function report() {
   const f = lastFlight!;
+  // the badges this flight earned pop up once, outside the screen so the render does not wipe them
+  const toast = earnedToast(freshBadges); freshBadges = [];
+  if (toast) document.body.append(toast);
   const run = s.runs[s.runs.length - 1]; const o = run.outcome!; const res = run.resolution!; const end = endingFor(o.cause);
   const bad = o.phases.find((p) => p.checks.some((c) => !c.passed));
   const failedCheck = bad?.checks.find((c) => !c.passed);
@@ -791,11 +859,11 @@ function report() {
     h('p', { class: 'lede' }, end.because),
     h('ol', { class: 'phases' }, ...o.phases.map((p) => {
       const c = tightest(p.checks); const use = c ? c.value / c.limit : 0;
-      return h('li', { class: p.passed ? 'pass' : p.reached ? 'fail' : 'skip' },
-        h('b', {}, phaseNames[p.phase]), h('span', {}, p.passed ? 'Passed' : p.reached ? 'Failed' : 'Not reached'),
+      return h('li', { class: p.skipped ? 'skip' : p.passed ? 'pass' : p.reached ? 'fail' : 'skip' },
+        h('b', {}, phaseNames[p.phase]), h('span', {}, p.skipped ? uiText('Skipped', 'Sauté') : p.passed ? 'Passed' : p.reached ? 'Failed' : 'Not reached'),
         p.reached && c && h('div', { class: `margin ${use > 1 ? 'over' : use > 0.88 ? 'tight' : ''}` }, h('i', { style: `width:${Math.min(100, use * 100)}%` })),
         p.reached && c && h('small', {}, `${what[c.kind]} at ${fmt(use * 100)}% of its limit`),
-        p.reached && h('small', { class: 'dim' }, flownLine(p) ?? `${fmt(p.failProb * 100, 1)}% chance of a part failing`));
+        p.reached && h('small', { class: 'dim' }, flownLine(p, o.flown) ?? `${fmt(p.failProb * 100, 1)}% chance of a part failing`));
     })),
     ok && closest && h('p', { class: 'closest' }, h('b', {}, 'Closest call. '),
       `${what[closest.c!.kind]} during ${phaseNames[closest.p.phase].toLowerCase()} reached ${fmt((closest.c!.value / closest.c!.limit) * 100)}% of its limit (${fmt(closest.c!.value, 1)} of ${fmt(closest.c!.limit, 1)} ${closest.c!.unit}). ${closest.c!.value / closest.c!.limit > 0.88 ? 'A little more and this crew would not have come home.' : 'There was room to spare there.'}`),
@@ -831,7 +899,7 @@ function report() {
       h('div', { class: 'choices' }, ...answered(run.decisions).filter(({ q }) => realHistory.optionByQuestion[q.id]).map(({ q, opt: mine }) => {
         const real = q.options.find((x) => x.id === realHistory.optionByQuestion[q.id])!;
         return h('div', { class: 'cmp' }, h('b', {}, q.prompt), h('span', {}, `You: ${mine.label}`), h('span', { class: real.id === mine.id ? 'same' : '' }, `History: ${real.label}`), h('small', {}, realHistory.notes[q.id]));
-      })), h('p', { class: 'fine' }, `Source: ${realHistory.source.label} (${realHistory.source.status})`)),
+      })), apolloBurns(), h('p', { class: 'fine' }, `Source: ${realHistory.source.label} (${realHistory.source.status})`)),
     h('div', { class: 'row' }, nextBtn)));
 }
 
@@ -868,8 +936,36 @@ function done() {
     h('p', { class: 'lede' }, `You landed ${fmt(chapter.deadlineDay - s.meters.day)} days before the decade ended.`),
     h('section', { class: 'card' }, h('h3', {}, 'Leaderboard (this device)'), h('ol', { class: 'board' }, ...board().map((b) => h('li', {}, h('b', {}, b.grade), h('span', {}, `${b.score} pts`), h('span', { class: 'dim' }, `${b.runs} attempt${b.runs > 1 ? 's' : ''}`))))),
     h('div', { class: 'row' }, copy, btn('Back to the report', () => go('report'), 'btn ghost'),
-      btn('Play again (fresh world)', () => { s = newSession(Math.floor(Math.random() * 1e9)); go('title'); }, 'btn primary')),
-    h('p', { class: 'fine' }, 'Next chapters would carry orbital debris forward, because it never goes away.')));
+      btn('Play again (fresh world)', () => { s = newSession(Math.floor(Math.random() * 1e9)); go('title'); }, 'btn ghost'),
+      btn(uiText('What comes next', 'La suite'), () => go('chapters'), 'btn primary big'))));
+}
+
+// ---------------------------------------------------------------- the chapters still to come
+/** Placeholders until the next chapters are written. Edit this list to name them. */
+const upcoming = [
+  { no: 2, title: ['Coming soon', 'Bientôt'], line: ['The next chapter of the story.', 'Le prochain chapitre de l’histoire.'] },
+  { no: 3, title: ['Coming soon', 'Bientôt'], line: ['The next chapter of the story.', 'Le prochain chapitre de l’histoire.'] },
+  { no: 4, title: ['Coming soon', 'Bientôt'], line: ['The next chapter of the story.', 'Le prochain chapitre de l’histoire.'] },
+];
+function chapters() {
+  const done = !!s.grade;
+  return shell(h('article', { class: 'report chapters' },
+    h('p', { class: 'eyebrow' }, uiText('Space Bar', 'Space Bar')),
+    h('h2', { tabindex: '-1' }, uiText('The story continues', 'L’histoire continue')),
+    h('p', { class: 'lede' }, uiText('The Moon was only the beginning. Whatever you leave in orbit carries into the chapters ahead, because debris never goes away.',
+      'La Lune n’était qu’un début. Ce que vous laissez en orbite vous suivra dans les prochains chapitres, car les débris ne disparaissent jamais.')),
+    h('ol', { class: 'chapter-list' },
+      h('li', { class: done ? 'ch done' : 'ch open' },
+        h('span', { class: 'ch-no' }, String(chapter.id)),
+        h('div', {}, h('b', {}, uiText(chapter.title, 'Course vers la Lune')), h('span', {}, `${chapter.years.replace('-', '–')}`)),
+        h('em', { class: 'ch-state' }, done ? uiText('Complete', 'Terminé') : uiText('Playable', 'Jouable'))),
+      ...upcoming.map((c) => h('li', { class: 'ch locked', 'aria-disabled': 'true' },
+        h('span', { class: 'ch-no' }, String(c.no)),
+        h('div', {}, h('b', {}, uiText(c.title[0], c.title[1])), h('span', {}, uiText(c.line[0], c.line[1]))),
+        h('em', { class: 'ch-state' }, uiText('Locked', 'Verrouillé'))))),
+    h('div', { class: 'row' },
+      done && btn(uiText('Back to the results', 'Retour aux résultats'), () => go('done'), 'btn ghost'),
+      btn(uiText('Title screen', 'Écran titre'), () => go('title'), 'btn primary'))));
 }
 let boarded = -1;
 function addToBoardOnce() { if (boarded !== s.baseSeed + s.runs.length) { boarded = s.baseSeed + s.runs.length; addToBoard(s); } }

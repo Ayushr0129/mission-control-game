@@ -85,6 +85,11 @@ export function resolveRun(m: Meters, ch: Chapter, totals: Totals, outcome: Outc
     if (late) gain *= 0.5;
     trust += gain;
     log.push(`Success: +${gain.toFixed(0)} trust${late ? ' (halved: the decade had ended)' : ''}`);
+  } else if (outcome.cause === 'abort') {
+    // the crew came home: a disappointment, not a disaster, and nothing was left broken in orbit
+    const loss = Math.min(ch.trustOnFailure * 0.5 * (livestream ? 2 : 1), ch.trustFailureCap);
+    trust -= loss;
+    log.push(`Free return, no landing: -${loss.toFixed(0)} trust`);
   } else {
     let loss = ch.trustOnFailure * (livestream ? 2 : 1);
     loss = Math.min(loss, ch.trustFailureCap);

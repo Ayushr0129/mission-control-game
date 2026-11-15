@@ -9,7 +9,7 @@ import { buildShip } from './ship';
  * draws back as it climbs, so the craft is always big enough to read which way it points.
  */
 const MODEL_SCALE = 7;   // the lander is drawn larger than life so its tilt is easy to see
-const GROUND = 0x8a857c, GROUND_DARK = 0x5e5a53;
+const GROUND = 0x969799, GROUND_DARK = 0x55585d;
 
 export class LanderView {
   scene = new THREE.Scene();
@@ -26,14 +26,14 @@ export class LanderView {
     const s = this.scene; s.background = new THREE.Color(0x01020a);
     s.add(starField(1800, 2400, 3, 1.4), starField(240, 2300, 9, 2.2));
     const sun = new THREE.DirectionalLight(0xfff4e0, 3.2); sun.position.set(-6, 5, 8); s.add(sun);
-    s.add(new THREE.AmbientLight(0x334466, 0.7), new THREE.HemisphereLight(0x9fb8ff, 0x3a3630, 0.5));
+    s.add(new THREE.AmbientLight(0x677384, 0.28), new THREE.HemisphereLight(0xd7dfeb, 0x30343b, 0.35));
     const earth = planet(1, earthCanvas(), './textures/earth.jpg', 0x335588); earth.scale.setScalar(95); earth.position.set(-520, 560, -1500);
-    const atm = atmosphere(1, 0x6fb4ff, 4.5); atm.scale.setScalar(1.035 / 1.12); earth.add(atm); s.add(earth);
+    const atm = atmosphere(1, 0x6fb4ff, 4.5); earth.add(atm); s.add(earth);
 
     // the ground: a wall of regolith below y = 0, with a paler line along the top
     const tex = new THREE.CanvasTexture(moonCanvas()); tex.wrapS = tex.wrapT = THREE.RepeatWrapping; tex.repeat.set(26, 4); tex.colorSpace = THREE.SRGBColorSpace;
     const soil = new THREE.Mesh(new THREE.PlaneGeometry(9000, 900), new THREE.MeshBasicMaterial({ map: tex, color: GROUND })); soil.position.set(0, -450, 0); s.add(soil);
-    const lip = new THREE.Mesh(new THREE.PlaneGeometry(9000, 1.2), new THREE.MeshBasicMaterial({ color: 0xcfc9bd })); lip.position.set(0, -0.6, 0.2); s.add(lip);
+    const lip = new THREE.Mesh(new THREE.PlaneGeometry(9000, .35), new THREE.MeshBasicMaterial({ color: 0xaaaeb3 })); lip.position.set(0, -.175, 0.2); s.add(lip);
 
     // the craft
     const ship = buildShip(new Set(tags));

@@ -1,0 +1,113 @@
+%  Lunar Far-Side Relay: from a 200 km circular parking orbit to a 100 x 3,000 km lunar orbit.
+%  Two impulsive burns: trans-lunar injection (TLI) and lunar orbit insertion (LOI).
+%  Method adapted from GMAT's sample Ex_GivenEpochGoToTheMoon.script (Apache 2.0): a coarse pass turns the parking
+%  orbit so the transfer's far end meets the Moon, then a fine pass sets the parking orbit and the TLI burn together
+%  so the craft passes the Moon 100 km up; finally LOI at closest approach sets the far point at 3,000 km.
+%  Forces: point masses of Earth, Moon and Sun. Instant burns along the velocity. Moon radius 1737.4 km.
+%  Departure: 2027-01-01, a representative date; the totals change little from month to month.
+
+Create Spacecraft Sat InitSat;
+Sat.DateFormat = UTCGregorian;
+Sat.Epoch = '01 Jan 2027 00:00:00.000';
+Sat.CoordinateSystem = EarthMJ2000Eq;
+Sat.DisplayStateType = Keplerian;
+Sat.SMA = 6578.137;
+Sat.ECC = 0.00001;
+Sat.INC = 28.5;
+Sat.RAAN = 45;
+Sat.AOP = 0;
+Sat.TA = 0;
+
+Create ForceModel EarthOnly NearEarth NearMoon;
+EarthOnly.CentralBody = Earth;
+EarthOnly.PointMasses = {Earth};
+EarthOnly.Drag = None;
+NearEarth.CentralBody = Earth;
+NearEarth.PointMasses = {Earth, Sun, Luna};
+NearEarth.Drag = None;
+NearMoon.CentralBody = Luna;
+NearMoon.PointMasses = {Luna, Earth, Sun};
+NearMoon.Drag = None;
+
+Create Propagator EarthOnlyProp NearEarthProp NearMoonProp;
+EarthOnlyProp.FM = EarthOnly;
+EarthOnlyProp.Type = RungeKutta89;
+EarthOnlyProp.MaxStep = 3600;
+NearEarthProp.FM = NearEarth;
+NearEarthProp.Type = RungeKutta89;
+NearEarthProp.MaxStep = 3600;
+NearMoonProp.FM = NearMoon;
+NearMoonProp.Type = RungeKutta89;
+NearMoonProp.MaxStep = 600;
+
+Create CoordinateSystem EarthMoonRot MoonInertial;
+EarthMoonRot.Origin = Earth;
+EarthMoonRot.Axes = ObjectReferenced;
+EarthMoonRot.XAxis = R;
+EarthMoonRot.ZAxis = N;
+EarthMoonRot.Primary = Earth;
+EarthMoonRot.Secondary = Luna;
+MoonInertial.Origin = Luna;
+MoonInertial.Axes = MJ2000Eq;
+
+Create ImpulsiveBurn TLI LOI;
+TLI.CoordinateSystem = Local;
+TLI.Origin = Earth;
+TLI.Axes = VNB;
+TLI.Element1 = 3.13;
+LOI.CoordinateSystem = Local;
+LOI.Origin = Luna;
+LOI.Axes = VNB;
+LOI.Element1 = -0.3;
+
+Create DifferentialCorrector DC;
+DC.MaximumIterations = 60;
+
+Create ReportFile rf;
+rf.Filename = '@OUT@/moon.txt';
+rf.WriteHeaders = true;
+rf.LeftJustify = On;
+rf.ZeroFill = Off;
+
+Create Variable RAAN AOP dv_TLI dv_LOI peri_alt_km apo_alt_km transfer_days;
+
+BeginMissionSequence;
+InitSat = Sat;
+
+% Coarse: turn the parking orbit so the transfer's far end points at the Moon (Earth-only gravity, no impact risk)
+Target DC {SolveMode = Solve, ExitMode = SaveAndContinue};
+   Vary DC(Sat.RAAN = 45, {Perturbation = 0.00001, MaxStep = 5});
+   Vary DC(Sat.AOP = 0, {Perturbation = 0.00001, MaxStep = 5});
+   Maneuver TLI(Sat);
+   RAAN = Sat.RAAN;
+   AOP = Sat.AOP;
+   Propagate EarthOnlyProp(Sat) {Sat.Earth.Apoapsis, Sat.ElapsedDays = 4.5};
+   Achieve DC(Sat.EarthMoonRot.RA = 0, {Tolerance = 1});
+   Achieve DC(Sat.EarthMoonRot.DEC = 0, {Tolerance = 1});
+EndTarget;
+
+% Fine: parking orbit and TLI together, so the craft passes 100 km above the Moon
+Sat = InitSat;
+Target DC {SolveMode = Solve, ExitMode = SaveAndContinue};
+   Vary DC(Sat.RAAN = RAAN, {Perturbation = 0.000001, MaxStep = 2});
+   Vary DC(Sat.AOP = AOP, {Perturbation = 0.000001, MaxStep = 2});
+   Vary DC(TLI.Element1 = TLI.Element1, {Perturbation = 0.0000001, MaxStep = 0.01});
+   Maneuver TLI(Sat);
+   Propagate NearEarthProp(Sat) {Sat.Luna.Periapsis, Sat.ElapsedDays = 6};
+   Achieve DC(Sat.Luna.RMAG = 1837.4, {Tolerance = 0.1});
+   Achieve DC(Sat.MoonInertial.BVectorAngle = 90, {Tolerance = 0.1});
+EndTarget;
+peri_alt_km = Sat.Luna.RMAG - 1737.4;
+transfer_days = Sat.ElapsedDays;
+
+% Lunar orbit insertion at closest approach: far point at 3,000 km (semi-major axis (1837.4 + 4737.4) / 2)
+Target DC {SolveMode = Solve, ExitMode = SaveAndContinue};
+   Vary DC(LOI.Element1 = -0.3, {Perturbation = 0.00001, MaxStep = 0.1});
+   Maneuver LOI(Sat);
+   Achieve DC(Sat.Luna.SMA = 3287.4, {Tolerance = 0.1});
+EndTarget;
+apo_alt_km = Sat.Luna.RadApo - 1737.4;
+
+dv_TLI = TLI.Element1;
+dv_LOI = abs(LOI.Element1);
+Report rf dv_TLI dv_LOI peri_alt_km apo_alt_km transfer_days;

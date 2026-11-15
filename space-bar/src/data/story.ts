@@ -151,4 +151,6 @@ export const papers = {
   power: { head: 'THE LIGHTS WENT OUT', sub: (c: string) => `${c} lost power a quarter of a million miles from home. Ground control watched the screens go dark.` },
   vehicle: { head: 'MERIDIAN LOST', sub: (c: string) => `${c} died when the spacecraft failed. Congress asks who is responsible.` },
   crash: { head: 'LOST AT THE SURFACE', sub: (c: string) => `${c} reached the Moon and could not slow down in time.` },
+  abort: { head: 'HOME, BUT NOT ON THE MOON', sub: (c: string) => `${c} swung round the Moon on the free return and splashed down safely. The landing will have to wait.` },
+  reentry: { head: 'LOST ON THE WAY HOME', sub: (c: string) => `${c} came all the way back from the Moon and missed the entry corridor by degrees.` },
 };

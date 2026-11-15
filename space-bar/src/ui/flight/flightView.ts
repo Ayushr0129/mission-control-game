@@ -7,7 +7,7 @@ import { v3 } from '../../domain/sim/units';
 import { fmt, h } from '../dom';
 import { rocketVisual, updateRocketFlames } from '../rocketVisual';
 
-export interface FlightViewOptions { blueprint: RocketBlueprint; seed: number; initialState?: FlightState; onAutosave: (state: FlightState) => void; onComplete: (state: FlightState) => void; onPause: () => void }
+export interface FlightViewOptions { blueprint: RocketBlueprint; seed: number; initialState?: FlightState; onAutosave: (state: FlightState) => void; onComplete: (state: FlightState) => void; onPause: () => void; onBack?: () => void }
 const SAS = ['stability', 'prograde', 'retrograde', 'normal', 'radial-out', 'maneuver'] as const;
 
 export function flightView(options: FlightViewOptions): HTMLElement {
@@ -17,7 +17,8 @@ export function flightView(options: FlightViewOptions): HTMLElement {
   const shownMoments=new Set<LearningMomentId>();
   const root = h('section', { class: 'flight-console' }), map = h('canvas', { class: 'orbit-map', 'aria-label': 'Orbital map' }) as HTMLCanvasElement,vehicleVisual=rocketVisual(options.blueprint,{className:'flight-rocket',label:`${options.blueprint.name} in flight`}),mapWrap=h('div',{class:'orbit-map-wrap'},map,vehicleVisual);
   const hud = h('div', { class: 'flight-hud' }), radio = h('div', { class: 'radio-log', 'aria-live': 'polite' }, 'CAPCOM: Vehicle telemetry is nominal.'), controls = h('div', { class: 'flight-controls' }),debug=h('pre',{class:'flight-debug',hidden:'true'}),learning=h('aside',{class:'learning-moment',hidden:'true','aria-live':'polite'});
-  root.append(h('header', {}, h('b', {}, 'MISSION FLIGHT · FORWARD ONLY'), h('button', { onclick: options.onPause }, 'Ⅱ Pause')), mapWrap, hud, controls, debug, learning, radio);
+  const stop=()=>{running=false;removeEventListener('keydown',onKey);removeEventListener('keyup',onKeyUp);};
+  root.append(h('header', {}, h('b', {}, 'MISSION FLIGHT'),options.onBack&&h('button',{class:'flight-back',onclick:()=>{stop();options.onBack?.();}},'← Back'), h('button', { onclick: options.onPause }, 'Ⅱ Pause')), mapWrap, hud, controls, debug, learning, radio);
 
   const explain=(key:string,why:string)=>{learning.hidden=false;learning.replaceChildren(h('p',{class:'eyebrow'},`WHY ${key}?`),h('p',{},why),h('button',{onclick:()=>{learning.hidden=true;}},'Close'));};
   const metric=(key:string,value:string,why?:string)=>h('div',{title:why},h('small',{},key),h('b',{},value),why&&h('span',{class:'why-static','aria-hidden':'true'},'?'));
@@ -61,7 +62,7 @@ export function flightView(options: FlightViewOptions): HTMLElement {
   const loop = (now: number) => {
     if (!running) return; const result = stepFlight(state, Math.min(.1, (now - last) / 1000)); last = now; state = result.state; draw(result.telemetry); const story=storyForEvents(state.events)[0]; if(story)radio.textContent=`${story.speaker}: ${story.text}`;
     const second = Math.floor(state.missionTimeS); if (second > 0 && second % 10 === 0 && second !== lastAutosave) { lastAutosave = second; options.onAutosave(state); }
-    if (state.failed || state.phase === 'recovery') { running = false; removeEventListener('keydown', onKey);removeEventListener('keyup',onKeyUp); options.onComplete(state); return; } requestAnimationFrame(loop);
+    if (state.failed || state.phase === 'recovery') { stop(); options.onComplete(state); return; } requestAnimationFrame(loop);
   };
   draw(flightTelemetry(state)); requestAnimationFrame(loop); return root;
 }

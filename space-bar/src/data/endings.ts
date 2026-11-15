@@ -1,6 +1,6 @@
 import { Cause, Phase } from '../sim/types';
 
-export type EndingId = 'success' | 'comms' | 'power' | 'vehicle' | 'crash';
+export type EndingId = 'success' | 'comms' | 'power' | 'vehicle' | 'crash' | 'abort' | 'reentry';
 export interface Line { who: string; text: string }
 export interface Ending {
   id: EndingId; title: string;
@@ -74,6 +74,30 @@ export const ending: Record<EndingId, Ending> = {
       { who: 'Houston', text: '...do you read?' },
     ],
   },
+  abort: {
+    id: 'abort', title: 'Free return', headline: 'They came home without landing',
+    because: 'There was no burn into Moon orbit, so the ship swung round the far side of the Moon on its free-return path and fell back to Earth, the way the trajectory was designed to. The crew is safe. Nobody walked on the Moon.',
+    avoid: 'At the Moon, turn the ship to point backwards and burn until the speed is inside the green band. The free return is the safety net, not the mission.',
+    lessonTag: 'free-return', lessonText: 'Last time the ship took the free return home. Burn into Moon orbit to land.',
+    lines: [
+      { who: 'Houston', text: 'We see no burn. You are on the free return.' },
+      { who: 'Commander', text: 'Copy. Coming home the long way.' },
+      { who: 'Houston', text: 'The Moon will swing you back to us. Good trajectory.' },
+      { who: 'Commander', text: 'Not the trip we planned.' },
+    ],
+  },
+  reentry: {
+    id: 'reentry', title: 'Lost at entry', headline: 'The ship missed the entry corridor',
+    because: 'The ship met the atmosphere at the wrong angle. Too steep, and the heat and the braking are more than the ship and the crew can survive. Too shallow, and it skips off the air back into space, with no way home.',
+    avoid: 'Before entry, point the way the arrow says and burn only until the needle is inside the green band. Then let go. If you leave it alone, guidance makes the correction for you.',
+    lessonTag: 'corridor', lessonText: 'Last time the ship missed the entry corridor. Burn only until the needle is in the green, then let go.',
+    lines: [
+      { who: 'Houston', text: 'Entry interface in one minute.' },
+      { who: 'Commander', text: 'The angle is wrong. We are outside the corridor.' },
+      { who: 'Houston', text: 'Copy. Stand by for blackout.' },
+      { who: 'Houston', text: '...do you read? Please respond.' },
+    ],
+  },
 };
 
 export function endingFor(cause: Cause | null): Ending {
@@ -81,6 +105,8 @@ export function endingFor(cause: Cause | null): Ending {
   if (cause === 'comms') return ending.comms;
   if (cause === 'power') return ending.power;
   if (cause === 'piloting') return ending.crash;
+  if (cause === 'abort') return ending.abort;
+  if (cause === 'reentry') return ending.reentry;
   return ending.vehicle;
 }
 
@@ -91,6 +117,8 @@ export const lessonWatch: Record<Cause, string[]> = {
   mass: ['route-direct', 'docking-reliable', 'power-extra', 'dish-large'],
   hardware: ['rush', 'cabin-testing', 'terrain-rough'],
   piloting: ['route-direct', 'route-eor', 'instruments-full', 'power-extra', 'dish-large'],
+  abort: [],
+  reentry: [],
 };
 
 export const phaseNames: Record<Phase, string> = {
