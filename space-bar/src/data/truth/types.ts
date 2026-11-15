@@ -17,7 +17,7 @@ export const sourced = <T>(value: T, document: string, location: string, status:
   source: { document, location, retrieved: '2026-11-14', status },
 });
 
-export type Destination = 'suborbital' | 'leo' | 'lunar-orbit' | 'lunar-surface' | 'mars-transfer';
+export type Destination = 'suborbital' | 'leo' | 'lunar-orbit' | 'lunar-surface' | 'mars-transfer' | 'deep-space';
 export type VehicleStatus = 'operational' | 'retired' | 'test-flight';
 
 export interface TruthRocket {
