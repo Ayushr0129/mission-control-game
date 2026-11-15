@@ -26,6 +26,15 @@ describe('headless RK4 ascent', () => {
     expect(realAscentTelemetry(spec, first, environment(true)).altitudeM).toBeCloseTo(cape.altitudeM, 5);
   });
 
+  it('does not release a launch-capable rocket until the engine is commanded', () => {
+    const blueprint = ROCKET_PRESETS.find((rocket) => rocket.id === 'saturn-v')!;
+    const spec = ascentVehicleSpec(blueprint), env = environment(true);
+    let state = createRealAscent(spec, env);
+    for (let index = 0; index < 10 / REAL_ASCENT_STEP_S; index += 1) state = stepRealAscent(spec, state, env, { throttle: 0, targetPitchRad: 0, stage: false });
+    expect(state.launched).toBe(false);
+    expect(realAscentTelemetry(spec, state, env).altitudeM).toBeCloseTo(cape.altitudeM, 5);
+  });
+
   it('matches short-duration vacuum free fall', () => {
     const spec = simpleSpec(0);
     const startAltitudeM = 10_000;
@@ -75,7 +84,7 @@ function flyPreset(id: string) {
     if (ascentCutoff && telemetry.radialSpeedMps <= 0) circularizing = true;
     const targetPitchRad = circularizing ? Math.PI / 2 : gravityTurnPilotPitch(pitchProgram, telemetry);
     const throttle = !ascentCutoff || (circularizing && telemetry.periapsisM < 155_000) ? 1 : 0;
-    state = stepRealAscent(spec, state, env, { throttle, targetPitchRad, stage: false });
+    state = stepRealAscent(spec, state, env, { throttle, targetPitchRad, stage: telemetry.activeStageDry });
     if (realAscentTelemetry(spec, state, env).stableParkingOrbit) break;
   }
   return { state, telemetry: realAscentTelemetry(spec, state, env) };
@@ -88,6 +97,30 @@ describe('reference pitch-program pilots', () => {
     expect(result.telemetry.apoapsisM).toBeGreaterThan(150_000);
     expect(result.telemetry.periapsisM).toBeGreaterThanOrEqual(150_000);
     expect(result.state.events.some((event) => event.includes('SEPARATION'))).toBe(true);
+  });
+
+  it('holding only the engine burns the first stage but never reaches orbit', () => {
+    const blueprint = ROCKET_PRESETS.find((rocket) => rocket.id === 'saturn-v')!;
+    const spec = ascentVehicleSpec(blueprint), env = environment(true);
+    let state = createRealAscent(spec, env);
+    for (let index = 0; index < 900 / REAL_ASCENT_STEP_S; index += 1) state = stepRealAscent(spec, state, env, { throttle: 1, targetPitchRad: 0, stage: false });
+    const telemetry = realAscentTelemetry(spec, state, env);
+    expect(state.activeStage).toBe(0);
+    expect(telemetry.activeStageDry).toBe(true);
+    expect(telemetry.stableParkingOrbit).toBe(false);
+    expect(telemetry.periapsisM).toBeLessThan(150_000);
+  });
+
+  it('does not separate a stage until the player commands it after depletion', () => {
+    const blueprint = ROCKET_PRESETS.find((rocket) => rocket.id === 'saturn-v')!;
+    const spec = ascentVehicleSpec(blueprint), env = environment(true);
+    let state = createRealAscent(spec, env);
+    while (!realAscentTelemetry(spec, state, env).activeStageDry) state = stepRealAscent(spec, state, env, { throttle: 1, targetPitchRad: 0, stage: false });
+    const waiting = stepRealAscent(spec, state, env, { throttle: 1, targetPitchRad: 0, stage: false });
+    expect(waiting.activeStage).toBe(0);
+    const staged = stepRealAscent(spec, waiting, env, { throttle: 0, targetPitchRad: 0, stage: true });
+    expect(staged.activeStage).toBe(1);
+    expect(staged.events.at(-1)).toContain('SEPARATION');
   });
 
   it.fails('Falcon 9 remains a calibration gate until verified stage data replaces the legacy preset', () => {

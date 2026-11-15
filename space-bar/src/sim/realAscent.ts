@@ -43,6 +43,8 @@ export interface RealAscentTelemetry {
   periapsisM: number;
   eccentricity: number;
   stableParkingOrbit: boolean;
+  activeStageDry: boolean;
+  allPropellantDepleted: boolean;
 }
 
 interface Derivative { position: Vec3; velocity: Vec3; propellantKgS: number; gravityLossMps2: number; dragLossMps2: number }
@@ -162,12 +164,14 @@ export function realAscentTelemetry(spec: AscentVehicleSpec, state: RealAscentSt
     periapsisM,
     eccentricity: elements.eccentricity,
     stableParkingOrbit: periapsisM >= 150000 && apoapsisM >= periapsisM && elements.eccentricity < 0.1,
+    activeStageDry: (state.stagePropellantKg[state.activeStage] ?? 0) <= 1e-6,
+    allPropellantDepleted: state.stagePropellantKg.slice(state.activeStage).every((fuel) => fuel <= 1e-6),
   };
 }
 
 export function stepRealAscent(spec: AscentVehicleSpec, current: RealAscentState, env: RealAscentEnvironment, control: RealAscentControl, dtS = REAL_ASCENT_STEP_S): RealAscentState {
   let state = current;
-  if (control.stage && state.activeStage < spec.stages.length - 1) {
+  if (control.stage && (state.stagePropellantKg[state.activeStage] ?? 0) <= 1e-6 && state.activeStage < spec.stages.length - 1) {
     state = { ...state, activeStage: state.activeStage + 1, events: [...state.events, `STAGE_${state.activeStage + 1}_SEPARATION`] };
   }
   const maxPitchRateRadS = 6 * Math.PI / 180;
@@ -189,7 +193,7 @@ export function stepRealAscent(spec: AscentVehicleSpec, current: RealAscentState
   const stagePropellantKg = state.stagePropellantKg.map((value, index) => index === state.activeStage ? Math.max(0, value - propellantUsedKg) : value);
   const telemetryBeforeClamp = realAscentTelemetry(spec, { ...state, positionM, velocityMps, stagePropellantKg }, env);
   const radial = radialAt(state.positionM);
-  const thrustRadialN = telemetryBeforeClamp.thrustN * Math.cos(pitchRad);
+  const thrustRadialN = (control.throttle > 0 ? telemetryBeforeClamp.thrustN * clamp(control.throttle, 0, 1) : 0) * Math.cos(pitchRad);
   const weightN = telemetryBeforeClamp.massKg * env.body.muM3S2 / mag(state.positionM) ** 2;
   let launched = state.launched;
   if (!launched && thrustRadialN <= weightN) {
@@ -197,17 +201,12 @@ export function stepRealAscent(spec: AscentVehicleSpec, current: RealAscentState
     velocityMps = atmosphereVelocity(positionM, env);
   } else launched = true;
   const events = [...state.events];
-  let activeStage = state.activeStage;
-  if (stagePropellantKg[activeStage] <= 1e-6 && activeStage < spec.stages.length - 1) {
-    activeStage += 1;
-    events.push(`STAGE_${activeStage}_SEPARATION`);
-  }
   return {
     ...state,
     positionM,
     velocityMps,
     pitchRad,
-    activeStage,
+    activeStage: state.activeStage,
     stagePropellantKg,
     launched,
     events,

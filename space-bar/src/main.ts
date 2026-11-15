@@ -160,7 +160,7 @@ function title() {
     h('p', { class: 'tag chapter' }, h('i', {}), uiText(`Chapter ${chapter.id}: ${chapter.title}`, `Chapitre ${chapter.id} : Course vers la Lune`), h('i', {})),
     h('p', { class: 'sub' }, uiText('Three people will climb into a machine you designed.', 'Trois personnes monteront dans une machine que vous avez conçue.')));
   const menu = h('div', { class: 'menu', hidden: playing },
-    h('div', { class: 'row' }, btn(uiText('Open Mission Lab'), () => { sfx.ambient(true); go('lab'); }, 'btn primary big'), btn(uiText('Play historical campaign'), () => { sfx.ambient(true); go('campaign'); }, 'btn ghost'), btn(uiText('Data and sources'), () => go('data'), 'btn ghost')),
+    h('div', { class: 'row' }, btn(uiText('Open Mission Lab'), () => { sfx.ambient(true); go('lab'); }, 'btn primary big'), btn(uiText('Take the job', 'Accepter la mission'), () => { sfx.ambient(true); go('brief'); }, 'btn ghost'), btn(uiText('Play historical campaign'), () => { sfx.ambient(true); go('campaign'); }, 'btn ghost'), btn(uiText('Data and sources'), () => go('data'), 'btn ghost')),
     h('p', { class: 'fine' }, uiText('Engineer a complete mission, assemble the vehicle piece by piece, fly an RCS rendezvous, dock and deploy a scientific payload—or enter the historical Moon-race campaign.')),
     preferenceControls(refreshPreferenceUi, 'title-preferences'),
     (lessons > 0 || fallen.length > 0) && h('p', { class: 'fine' },

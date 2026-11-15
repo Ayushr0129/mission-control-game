@@ -1,142 +1,46 @@
 import { ROCKET_PRESETS } from '../data/rockets';
 import { ExplainerState, RealFlightMoment, explainerRuleFor } from '../data/realFlightExplainer';
-import { ascentVehicleSpec } from '../domain/sim/vehicleSpec';
 import { BODIES, LAUNCH_SITES } from '../domain/sim/bodies';
+import { ascentVehicleSpec } from '../domain/sim/vehicleSpec';
 import { h } from './dom';
-import { FALCON_9_PITCH_PROGRAM, REAL_ASCENT_STEP_S, SATURN_V_PITCH_PROGRAM, createRealAscent, gravityTurnPilotPitch, realAscentTelemetry, stepRealAscent } from '../sim/realAscent';
+import { REAL_ASCENT_STEP_S, SATURN_V_PITCH_PROGRAM, createRealAscent, gravityTurnPilotPitch, realAscentTelemetry, stepRealAscent } from '../sim/realAscent';
 
-const format = (value: number, digits = 1) => Number.isFinite(value) ? value.toFixed(digits) : '—';
+type AssistMode='off'|'prograde'|'retrograde'|'guide';
+type Difficulty='easy'|'normal'|'hard';
+const format=(value:number,digits=1)=>Number.isFinite(value)?value.toFixed(digits):'—';
+const clamp=(value:number,low:number,high:number)=>Math.max(low,Math.min(high,value));
 
-export function realFlightView(onExit: () => void): HTMLElement {
-  const params = new URLSearchParams(location.search);
-  const requested = params.get('rocket') ?? 'saturn-v';
-  const blueprint = ROCKET_PRESETS.find((rocket) => rocket.id === requested) ?? ROCKET_PRESETS.find((rocket) => rocket.id === 'saturn-v')!;
-  const spec = ascentVehicleSpec(blueprint);
-  const earth = BODIES.earth;
-  const cape = LAUNCH_SITES.find((site) => site.id === 'cape')!;
-  const environment = { body: earth, launchLatitudeRad: cape.latitudeRad, launchAltitudeM: cape.altitudeM, dragEnabled: true };
-  let state = createRealAscent(spec, environment);
-  let throttle = 0;
-  let manualPitch = 0;
-  let guidance = true;
-  let demoSpeed = 1;
-  let running = true;
-  let ascentCutoff = false;
-  let circularizing = false;
-  let priorStage = state.activeStage;
-  let maxQAnnounced = false;
-  let lastMoment: RealFlightMoment = 'countdown';
-  let lastFrame = performance.now();
-  let accumulator = 0;
-  const trace: string[] = [];
+export function realFlightView(onExit:()=>void):HTMLElement{
+ const blueprint=ROCKET_PRESETS.find(rocket=>rocket.id==='saturn-v')!;
+ const spec=ascentVehicleSpec(blueprint),earth=BODIES.earth,cape=LAUNCH_SITES.find(site=>site.id==='cape')!,environment={body:earth,launchLatitudeRad:cape.latitudeRad,launchAltitudeM:cape.altitudeM,dragEnabled:true};
+ let state=createRealAscent(spec,environment),throttle=1,engineHeld=false,manualPitch=0,difficulty:Difficulty='normal',assist:AssistMode='off',autopilot=false,demoSpeed=1,running=true,lastFrame=performance.now(),accumulator=0,lastMoment:RealFlightMoment='countdown',maxQAnnounced=false,mapOpen=false,failure='';
+ const keys=new Set<string>(),trace:string[]=[];
+ const pathSvg='<svg viewBox="0 0 1000 620" aria-hidden="true"><defs><linearGradient id="sky" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="#16405b"/><stop offset="1" stop-color="#02050a"/></linearGradient></defs><rect width="1000" height="620" fill="url(#sky)"/><circle cx="500" cy="1040" r="470" class="real-earth"/><polyline class="real-path" points=""/></svg>';
+ const trajectory=h('div',{class:'real-trajectory',role:'img','aria-label':'Continuous live ascent trajectory',html:pathSvg}),path=trajectory.querySelector<SVGPolylineElement>('.real-path')!;
+ const rocket=h('div',{class:'real-rocket','aria-label':'Saturn V flight marker'},h('i'),h('b')),debris=h('div',{class:'real-debris','aria-label':'Separated stages'}),numbers=h('div',{class:'real-number-grid'}),stagePanel=h('div',{class:'real-stage-panel'}),mapPanel=h('section',{class:'real-map',hidden:true}),warning=h('div',{class:'real-warning',hidden:true});
+ const nowTitle=h('h3',{},'Countdown'),nowText=h('p',{class:'real-now-text'}),whyText=h('p',{class:'real-why'}),detailText=h('p',{class:'real-detail',hidden:true}),status=h('span',{class:'real-status'},'CLAMPED');
+ const assistButton=h('button',{class:'btn',onclick:()=>cycleAssist()},'Assist: OFF'),mapButton=h('button',{class:'btn',onclick:()=>{mapOpen=!mapOpen;mapPanel.hidden=!mapOpen;mapButton.textContent=mapOpen?'Close map':'Map (M)';}},'Map (M)'),speedButton=h('button',{class:'btn',onclick:()=>setDemo(demoSpeed>=8?1:demoSpeed*2)},'Demo 1×'),detailButton=h('button',{class:'btn',onclick:()=>{detailText.hidden=!detailText.hidden;detailButton.textContent=detailText.hidden?'Detailed':'Simple';}},'Detailed');
+ const engineButton=h('button',{class:'btn primary',onpointerdown:()=>{engineHeld=true;},onpointerup:()=>{engineHeld=false;},onpointerleave:()=>{engineHeld=false;}},'Hold engine (SPACE)');
+ const difficultyButtons=(['easy','normal','hard'] as Difficulty[]).map(level=>h('button',{class:`btn ${level===difficulty?'active':''}`,onclick:()=>setDifficulty(level)},level[0].toUpperCase()+level.slice(1)));
+ const root=h('main',{class:'real-flight-screen'},h('header',{class:'real-flight-header'},h('div',{},h('span',{class:'eyebrow'},'REAL FLIGHT · STAGE 1 · SATURN V'),h('h1',{},'Fly to orbit')),status,h('button',{class:'btn ghost',onclick:onExit},'Exit to start')),h('section',{class:'real-flight-layout'},h('div',{class:'real-stage'},trajectory,debris,rocket,h('div',{class:'real-horizon-label'},'EARTH'),mapPanel,h('div',{class:'real-controls'},engineButton,h('button',{class:'btn',onclick:()=>commandStage()},'Stage (ENTER)'),assistButton,mapButton,speedButton,detailButton),h('p',{class:'real-key-help'},'← → rotate · hold SPACE engine · ↑ ↓ throttle · ENTER stage · T assist · M map')),h('aside',{class:'real-panels'},h('section',{class:'real-panel now'},h('span',{class:'eyebrow'},'NOW'),nowTitle,nowText,whyText,detailText),h('section',{class:'real-panel'},h('span',{class:'eyebrow'},'DIFFICULTY'),h('div',{class:'real-difficulty'},...difficultyButtons),h('button',{class:'btn real-autopilot',onclick:()=>{autopilot=!autopilot;}},'Test fly with autopilot')),h('section',{class:'real-panel'},h('span',{class:'eyebrow'},'STAGES'),stagePanel),h('section',{class:'real-panel'},h('span',{class:'eyebrow'},'NUMBERS'),numbers))),warning);
 
-  const rocket = h('div', { class: 'real-rocket', 'aria-label': `${blueprint.name} flight marker` }, h('i'), h('b'));
-  const trajectory = h('div', { class: 'real-trajectory', role: 'img', 'aria-label': 'Live ascent trajectory', html: '<svg viewBox="0 0 1000 620" aria-hidden="true"><defs><linearGradient id="sky" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="#16405b"/><stop offset="1" stop-color="#02050a"/></linearGradient></defs><rect width="1000" height="620" fill="url(#sky)"/><circle cx="500" cy="1040" r="470" class="real-earth"/><polyline class="real-path" points=""/></svg>' });
-  const path = trajectory.querySelector<SVGPolylineElement>('.real-path')!;
-  const numbers = h('div', { class: 'real-number-grid' });
-  const nowTitle = h('h3', {}, 'Countdown');
-  const nowText = h('p', { class: 'real-now-text' });
-  const whyText = h('p', { class: 'real-why' });
-  const detailText = h('p', { class: 'real-detail', hidden: true });
-  const status = h('span', { class: 'real-status' }, 'CLAMPED');
-  const guidanceButton = h('button', { type: 'button', class: 'btn', onclick: () => { guidance = !guidance; guidanceButton.textContent = `Guidance: ${guidance ? 'ON' : 'MANUAL'}`; } }, 'Guidance: ON');
-  const detailButton = h('button', { type: 'button', class: 'btn', onclick: () => { detailText.hidden = !detailText.hidden; detailButton.textContent = detailText.hidden ? 'Detailed' : 'Simple'; } }, 'Detailed');
-  const igniteButton = h('button', { type: 'button', class: 'btn primary', onclick: () => { throttle = throttle > 0 ? 0 : 1; } }, 'Ignite / cutoff');
-  const speedButton = h('button', { type: 'button', class: 'btn', onclick: () => { demoSpeed = demoSpeed >= 8 ? 1 : demoSpeed * 2; speedButton.textContent = `Demo ${demoSpeed}×`; } }, 'Demo 1×');
-
-  const root = h('main', { class: 'real-flight-screen' },
-    h('header', { class: 'real-flight-header' }, h('div', {}, h('span', { class: 'eyebrow' }, 'REAL ASCENT · OPT-IN'), h('h1', {}, blueprint.name)), status, h('button', { class: 'btn ghost', onclick: onExit }, 'Exit to start')),
-    h('section', { class: 'real-flight-layout' },
-      h('div', { class: 'real-stage' }, trajectory, rocket, h('div', { class: 'real-horizon-label' }, 'EARTH'), h('div', { class: 'real-controls' }, igniteButton, guidanceButton, speedButton, detailButton), h('p', { class: 'real-key-help' }, '← → turn · SPACE engine · ENTER stage · G guidance · , . demo speed')),
-      h('aside', { class: 'real-panels' },
-        h('section', { class: 'real-panel now' }, h('span', { class: 'eyebrow' }, 'NOW'), nowTitle, nowText, whyText, detailText),
-        h('section', { class: 'real-panel' }, h('span', { class: 'eyebrow' }, 'NUMBERS'), numbers),
-        h('section', { class: 'real-panel history' }, h('span', { class: 'eyebrow' }, 'COMPARE WITH HISTORY'), h('h3', {}, blueprint.name), h('p', {}, 'Your flight is calculated from your live state. Historical milestone comparison will use sourced mission timelines when those records are added.'), h('span', { class: 'badge placeholder' }, 'timeline pending source')))),
-    h('div', { class: 'real-warning', hidden: true }));
-
-  const sourceRule = (moment: RealFlightMoment, explainer: ExplainerState) => {
-    const rule = explainerRuleFor(moment);
-    if (!rule) return;
-    nowTitle.textContent = moment.replace('-', ' ').toUpperCase();
-    nowText.textContent = rule.text(explainer);
-    whyText.textContent = `Why: ${rule.why}`;
-    detailText.textContent = rule.detail;
-  };
-
-  const update = () => {
-    const telemetry = realAscentTelemetry(spec, state, environment);
-    const massKg = telemetry.massKg;
-    const localGravity = earth.muM3S2 / Math.max(1, Math.hypot(state.positionM.x, state.positionM.y)) ** 2;
-    const explainer: ExplainerState = { moment: lastMoment, thrustN: telemetry.thrustN * throttle, weightN: massKg * localGravity, altitudeM: telemetry.altitudeM, horizontalSpeedMps: telemetry.horizontalSpeedMps, dynamicPressurePa: telemetry.dynamicPressurePa, dragN: telemetry.dragN, stage: state.activeStage + 1 };
-    let moment: RealFlightMoment = 'countdown';
-    if (telemetry.stableParkingOrbit) moment = 'orbit';
-    else if (circularizing || (ascentCutoff && telemetry.altitudeM > 100000)) moment = 'coast';
-    else if (state.activeStage !== priorStage) moment = 'staging';
-    else if (throttle === 0 && state.launched) moment = 'cutoff';
-    else if (!state.launched && throttle > 0) moment = telemetry.thrustN * throttle > massKg * localGravity ? 'liftoff' : 'ignition';
-    else if (!maxQAnnounced && telemetry.dynamicPressurePa >= state.maxDynamicPressurePa && telemetry.dynamicPressurePa > 1000) moment = 'max-q';
-    else if (state.pitchRad > 0.05) moment = telemetry.dragN > 1000 ? 'drag' : 'pitch-over';
-    else if (state.launched) moment = 'liftoff';
-    if (moment === 'max-q') maxQAnnounced = true;
-    if (moment !== lastMoment || moment === 'liftoff' || moment === 'pitch-over') { lastMoment = moment; sourceRule(moment, { ...explainer, moment }); }
-    priorStage = state.activeStage;
-    status.textContent = telemetry.stableParkingOrbit ? 'ORBIT' : state.launched ? `STAGE ${state.activeStage + 1}` : throttle > 0 ? 'IGNITION' : 'CLAMPED';
-    numbers.replaceChildren(...[
-      ['Altitude', `${format(telemetry.altitudeM / 1000)} km`], ['Speed', `${format(telemetry.speedMps / 1000, 2)} km/s`], ['Horizontal', `${format(telemetry.horizontalSpeedMps / 1000, 2)} km/s`],
-      ['Dynamic pressure', `${format(telemetry.dynamicPressurePa / 1000)} kPa`], ['Drag', `${format(telemetry.dragN / 1000)} kN`], ['Mass', `${format(telemetry.massKg / 1000)} t`],
-      ['Apoapsis', `${format(telemetry.apoapsisM / 1000)} km`], ['Periapsis', `${format(telemetry.periapsisM / 1000)} km`], ['Eccentricity', format(telemetry.eccentricity, 3)], ['MET', `${format(state.timeS, 1)} s`],
-    ].map(([label, value]) => h('div', {}, h('span', {}, label), h('b', {}, value))));
-    const altitudeScale = Math.min(1, Math.max(0, telemetry.altitudeM / 300000));
-    const horizontalScale = Math.max(-.45, Math.min(.45, telemetry.horizontalSpeedMps / 9000 * .45));
-    const x = 500 + horizontalScale * 850;
-    const y = 565 - altitudeScale * 500;
-    const stageBox = trajectory.getBoundingClientRect();
-    const markerX = stageBox.width * (x / 1000);
-    const markerY = stageBox.height * (0.5 - altitudeScale * 0.42);
-    rocket.style.transform = `translate(${markerX}px, ${markerY}px) rotate(${state.pitchRad * 180 / Math.PI}deg)`;
-    trace.push(`${x.toFixed(1)},${y.toFixed(1)}`); if (trace.length > 700) trace.shift();
-    path.setAttribute('points', trace.join(' '));
-  };
-
-  const keys = new Set<string>();
-  const keydown = (event: KeyboardEvent) => {
-    if (['ArrowLeft', 'ArrowRight', 'Space', 'Enter', 'KeyG', 'Comma', 'Period'].includes(event.code)) event.preventDefault();
-    if (event.code === 'Space' && !event.repeat) throttle = throttle > 0 ? 0 : 1;
-    if (event.code === 'KeyG' && !event.repeat) { guidance = !guidance; guidanceButton.textContent = `Guidance: ${guidance ? 'ON' : 'MANUAL'}`; }
-    if (event.code === 'Enter' && !event.repeat) state = stepRealAscent(spec, state, environment, { throttle, targetPitchRad: manualPitch, stage: true });
-    if (event.code === 'Period' && !event.repeat) demoSpeed = Math.min(8, demoSpeed * 2);
-    if (event.code === 'Comma' && !event.repeat) demoSpeed = Math.max(1, demoSpeed / 2);
-    keys.add(event.code);
-  };
-  const keyup = (event: KeyboardEvent) => keys.delete(event.code);
-  addEventListener('keydown', keydown);
-  addEventListener('keyup', keyup);
-
-  const frame = (time: number) => {
-    if (!root.isConnected) { running = false; removeEventListener('keydown', keydown); removeEventListener('keyup', keyup); return; }
-    const frameSeconds = Math.min(0.1, (time - lastFrame) / 1000) * demoSpeed;
-    lastFrame = time;
-    accumulator += frameSeconds;
-    while (accumulator >= REAL_ASCENT_STEP_S) {
-      const telemetry = realAscentTelemetry(spec, state, environment);
-      if (telemetry.apoapsisM >= 200000) ascentCutoff = true;
-      if (ascentCutoff && telemetry.radialSpeedMps <= 0) circularizing = true;
-      if (guidance) {
-        const program = blueprint.id === 'saturn-v' ? SATURN_V_PITCH_PROGRAM : FALCON_9_PITCH_PROGRAM;
-        manualPitch = circularizing ? Math.PI / 2 : gravityTurnPilotPitch(program, telemetry);
-        throttle = !ascentCutoff || (circularizing && telemetry.periapsisM < 155000) ? 1 : 0;
-      } else {
-        if (keys.has('ArrowLeft')) manualPitch = Math.max(0, manualPitch - 0.7 * REAL_ASCENT_STEP_S);
-        if (keys.has('ArrowRight')) manualPitch = Math.min(Math.PI / 2, manualPitch + 0.7 * REAL_ASCENT_STEP_S);
-      }
-      state = stepRealAscent(spec, state, environment, { throttle, targetPitchRad: manualPitch, stage: false });
-      accumulator -= REAL_ASCENT_STEP_S;
-    }
-    update();
-    if (running) requestAnimationFrame(frame);
-  };
-  sourceRule('countdown', { moment: 'countdown', thrustN: 0, weightN: 0, altitudeM: 0, horizontalSpeedMps: 0, dynamicPressurePa: 0, dragN: 0, stage: 1 });
-  update();
-  requestAnimationFrame(frame);
-  return root;
+ function setDemo(value:number){demoSpeed=value;speedButton.textContent=`Demo ${value}×`;}
+ function setDifficulty(value:Difficulty){difficulty=value;difficultyButtons.forEach((button,index)=>button.classList.toggle('active',(['easy','normal','hard'] as Difficulty[])[index]===value));assist=value==='easy'?'guide':'off';assistButton.textContent=`Assist: ${assist.toUpperCase()}`;}
+ function cycleAssist(){const modes:AssistMode[]=['off','prograde','retrograde','guide'];assist=modes[(modes.indexOf(assist)+1)%modes.length];assistButton.textContent=`Assist: ${assist.toUpperCase()}`;}
+ function commandStage(){const telemetry=realAscentTelemetry(spec,state,environment);if(!telemetry.activeStageDry){showWarning('Stage locked: the active stage still contains propellant.');return;}const before=state.activeStage;state=stepRealAscent(spec,state,environment,{throttle:0,targetPitchRad:manualPitch,stage:true});if(state.activeStage>before){const part=h('i',{class:'real-spent-stage',style:`left:${48+before*3}%;bottom:${22+before*4}%`});debris.append(part);requestAnimationFrame(()=>part.classList.add('fall'));}}
+ function showWarning(text:string){warning.textContent=text;warning.hidden=false;window.setTimeout(()=>{if(warning.textContent===text)warning.hidden=true;},2600);}
+ function sourceRule(moment:RealFlightMoment,explainer:ExplainerState){const rule=explainerRuleFor(moment);if(!rule)return;nowTitle.textContent=moment.replace('-',' ').toUpperCase();nowText.textContent=rule.text(explainer);whyText.textContent=`Why: ${rule.why}`;detailText.textContent=rule.detail;}
+ function endFlight(reason:string){if(failure)return;failure=reason;engineHeld=false;autopilot=false;status.textContent='FLIGHT ENDED';warning.hidden=false;warning.replaceChildren(h('b',{},'FLIGHT ENDED'),h('span',{},reason));}
+ function update(){
+  const t=realAscentTelemetry(spec,state,environment),mass=t.massKg,g=earth.muM3S2/Math.max(1,Math.hypot(state.positionM.x,state.positionM.y))**2,power=engineHeld?throttle:0,explainer:ExplainerState={moment:lastMoment,thrustN:t.thrustN*power,weightN:mass*g,altitudeM:t.altitudeM,horizontalSpeedMps:t.horizontalSpeedMps,dynamicPressurePa:t.dynamicPressurePa,dragN:t.dragN,stage:state.activeStage+1};let moment:RealFlightMoment='countdown';
+  if(t.stableParkingOrbit)moment='orbit';else if(t.activeStageDry)moment='cutoff';else if(!state.launched&&power>0)moment=t.thrustN*power>mass*g?'liftoff':'ignition';else if(!maxQAnnounced&&t.dynamicPressurePa>=state.maxDynamicPressurePa&&t.dynamicPressurePa>1000)moment='max-q';else if(state.pitchRad>0.05)moment=t.dragN>1000?'drag':'pitch-over';else if(state.launched)moment='liftoff';if(moment==='max-q')maxQAnnounced=true;if(moment!==lastMoment){lastMoment=moment;sourceRule(moment,{...explainer,moment});}
+  status.textContent=failure?'FLIGHT ENDED':t.stableParkingOrbit?'IN ORBIT':state.launched?`STAGE ${state.activeStage+1}`:power>0?'IGNITION':'CLAMPED';numbers.replaceChildren(...[['Altitude',`${format(t.altitudeM/1000)} km`],['Speed',`${format(t.speedMps/1000,2)} km/s`],['Horizontal',`${format(t.horizontalSpeedMps/1000,2)} km/s`],['Apoapsis',`${format(t.apoapsisM/1000)} km`],['Periapsis',`${format(t.periapsisM/1000)} km`],['Throttle',`${Math.round(throttle*100)}%`],['q / Max-Q',`${format(t.dynamicPressurePa/1000)} / ${format(state.maxDynamicPressurePa/1000)} kPa`],['MET',`${format(state.timeS,1)} s`]].map(([label,value])=>h('div',{},h('span',{},label),h('b',{},value))));
+  stagePanel.replaceChildren(...spec.stages.map((stage,index)=>{const fuel=state.stagePropellantKg[index],fraction=stage.propellantKg?fuel/stage.propellantKg:0,stateLabel=index<state.activeStage?'SEPARATED':index===state.activeStage?(fraction<=1e-6?'DRY':'ACTIVE'):'STANDBY';return h('article',{class:index===state.activeStage?'active':''},h('div',{},h('b',{},stage.id.toUpperCase()),h('span',{},stateLabel)),h('progress',{max:'1',value:String(fraction)}),h('small',{},`${format(fuel/1000)} / ${format(stage.propellantKg/1000)} t · ${stage.engines.reduce((sum,e)=>sum+e.count,0)} engines`));}));
+  const altitudeScale=clamp(Math.log10(Math.max(1,t.altitudeM+1))/Math.log10(400001),0,1),horizontalScale=clamp(t.horizontalSpeedMps/9000,-1,1),x=500+horizontalScale*360,y=565-altitudeScale*500,box=trajectory.getBoundingClientRect();rocket.style.transform=`translate(${box.width*x/1000}px,${box.height*(.91-altitudeScale*.82)}px) rotate(${state.pitchRad*180/Math.PI}deg)`;trace.push(`${x.toFixed(1)},${y.toFixed(1)}`);if(trace.length>900)trace.shift();path.setAttribute('points',trace.join(' '));const ap=clamp(t.apoapsisM/400000,0,1),pe=clamp(t.periapsisM/400000,0,1);mapPanel.replaceChildren(h('div',{class:'map-orbit',style:`--ap:${ap};--pe:${pe}`},h('i',{class:'map-earth'}),h('i',{class:'map-path'}),h('i',{class:'map-craft'})),h('dl',{},h('div',{},h('dt',{},'Ap'),h('dd',{},`${format(t.apoapsisM/1000)} km`)),h('div',{},h('dt',{},'Pe'),h('dd',{},`${format(t.periapsisM/1000)} km`))));
+  if(!failure&&state.launched&&t.altitudeM<0)endFlight('The trajectory intersected Earth. The rocket fell back before reaching orbit.');else if(!failure&&t.dynamicPressurePa>spec.maxDynamicPressurePa*1.25)endFlight('Dynamic pressure exceeded the structural limit. The vehicle broke up near Max-Q.');else if(!failure&&t.allPropellantDepleted&&!t.stableParkingOrbit&&t.radialSpeedMps<0)endFlight('All usable propellant is gone and periapsis remains inside the atmosphere. Orbit was missed.');
+ }
+ function controls(){const t=realAscentTelemetry(spec,state,environment);if(autopilot){const cutoff=t.apoapsisM>=185000,circularize=cutoff&&t.radialSpeedMps<=0;engineHeld=!cutoff||(circularize&&t.periapsisM<175000);manualPitch=circularize?Math.PI/2:gravityTurnPilotPitch(SATURN_V_PITCH_PROGRAM,t);if(t.activeStageDry)commandStage();return;}if(keys.has('ArrowUp'))throttle=clamp(throttle+.5*REAL_ASCENT_STEP_S,0,1);if(keys.has('ArrowDown'))throttle=clamp(throttle-.5*REAL_ASCENT_STEP_S,0,1);if(assist==='guide')manualPitch=gravityTurnPilotPitch(SATURN_V_PITCH_PROGRAM,t);else if(assist==='prograde')manualPitch=clamp(Math.atan2(t.horizontalSpeedMps,t.radialSpeedMps),0,Math.PI/2);else if(assist==='retrograde')manualPitch=clamp(Math.atan2(-t.horizontalSpeedMps,-t.radialSpeedMps),0,Math.PI/2);else{if(keys.has('ArrowLeft'))manualPitch=clamp(manualPitch-.45*REAL_ASCENT_STEP_S,-.15,Math.PI/2+.15);if(keys.has('ArrowRight'))manualPitch=clamp(manualPitch+.45*REAL_ASCENT_STEP_S,-.15,Math.PI/2+.15);}}
+ const keydown=(event:KeyboardEvent)=>{if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Space','Enter','KeyT','KeyM','Comma','Period'].includes(event.code))event.preventDefault();keys.add(event.code);if(event.code==='Space')engineHeld=true;if(event.code==='Enter'&&!event.repeat)commandStage();if(event.code==='KeyT'&&!event.repeat)cycleAssist();if(event.code==='KeyM'&&!event.repeat)mapButton.click();if(event.code==='Period'&&!event.repeat)setDemo(Math.min(8,demoSpeed*2));if(event.code==='Comma'&&!event.repeat)setDemo(Math.max(1,demoSpeed/2));};const keyup=(event:KeyboardEvent)=>{keys.delete(event.code);if(event.code==='Space')engineHeld=false;};addEventListener('keydown',keydown);addEventListener('keyup',keyup);
+ const frame=(time:number)=>{if(!root.isConnected){running=false;removeEventListener('keydown',keydown);removeEventListener('keyup',keyup);return;}accumulator+=Math.min(.1,(time-lastFrame)/1000)*demoSpeed;lastFrame=time;while(accumulator>=REAL_ASCENT_STEP_S&&!failure){controls();state=stepRealAscent(spec,state,environment,{throttle:engineHeld?throttle:0,targetPitchRad:manualPitch,stage:false});accumulator-=REAL_ASCENT_STEP_S;}update();if(running)requestAnimationFrame(frame);};
+ setDifficulty('normal');sourceRule('countdown',{moment:'countdown',thrustN:0,weightN:0,altitudeM:0,horizontalSpeedMps:0,dynamicPressurePa:0,dragN:0,stage:1});update();requestAnimationFrame(frame);return root;
 }

@@ -12,6 +12,12 @@ The headless pilot has explicit ascent, cutoff/coast and circularization phases.
 
 This model is not connected to the visible game in Stage B. The opt-in `?real=1` flight view belongs to Stage C.
 
+## Continuous real-flight controls
+
+The opt-in `?real=1` Stage 1 flight uses the same fixed-step RK4 ascent state as the headless tests. SPACE supplies thrust only while held, the arrow keys change the commanded attitude with a rate-limited angular response, and ENTER separates a stage only after its propellant is depleted. There is no automatic stage separation or hidden guidance takeover. Easy mode begins with guide-arrow hold selected; Normal and Hard begin with assists off. Prograde, retrograde, and guide-arrow holds are explicit player-selected assists.
+
+The Saturn V parking-orbit pilot operates through those same throttle, attitude, and stage inputs. Orbit is reported only when the osculating periapsis is at least 150 km, apoapsis is no lower than periapsis, and eccentricity is below 0.1. A hold-only vertical burn therefore exhausts the first stage and falls back rather than crossing a scripted altitude checkpoint.
+
 ## Constants
 
 | Constant | Value | Use | Source |
