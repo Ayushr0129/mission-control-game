@@ -4,8 +4,8 @@ import { canFly } from '../src/domain/canFly';
 import { truthRocketById } from '../src/data/truth';
 
 describe('Stage D sourced campaign', () => {
-  it('uses only the requested five mission numbers', () => {
-    expect(STAGE_D_CAMPAIGN.map(({ number }) => number)).toEqual([1, 2, 6, 7, 8]);
+  it('assembles the complete requested nine-mission sequence', () => {
+    expect(STAGE_D_CAMPAIGN.map(({ number }) => number)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9]);
     expect(STAGE_D_CAMPAIGN.every(({ mission, historicalRocket }) => mission.historicalRocketId.value === historicalRocket.id)).toBe(true);
   });
 
