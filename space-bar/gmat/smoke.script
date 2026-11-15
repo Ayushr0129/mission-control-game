@@ -1,0 +1,39 @@
+%  Smoke test: one orbit from a 200 km circular orbit around a point-mass Earth.
+%  Propagates one period (5306.6 s); the semi-major axis must come back unchanged (6578.137 km),
+%  proving GMAT runs and reports.
+
+Create Spacecraft Sat;
+Sat.DateFormat = UTCGregorian;
+Sat.Epoch = '01 Jan 2026 12:00:00.000';
+Sat.CoordinateSystem = EarthMJ2000Eq;
+Sat.DisplayStateType = Keplerian;
+Sat.SMA = 6578.137;
+Sat.ECC = 0;
+Sat.INC = 28.5;
+Sat.RAAN = 0;
+Sat.AOP = 0;
+Sat.TA = 0;
+
+Create ForceModel EarthPoint;
+EarthPoint.CentralBody = Earth;
+EarthPoint.PrimaryBodies = {Earth};
+EarthPoint.GravityField.Earth.Degree = 0;
+EarthPoint.GravityField.Earth.Order = 0;
+EarthPoint.Drag.AtmosphereModel = None;
+
+Create Propagator Prop;
+Prop.FM = EarthPoint;
+
+Create ReportFile rf;
+rf.Filename = '@OUT@/smoke.txt';
+rf.WriteHeaders = true;
+rf.LeftJustify = On;
+rf.ZeroFill = Off;
+
+Create Variable sma period;
+
+BeginMissionSequence;
+Propagate Prop(Sat) {Sat.ElapsedSecs = 5306.6};
+period = Sat.ElapsedSecs;
+sma = Sat.Earth.SMA;
+Report rf sma period;

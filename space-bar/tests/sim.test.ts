@@ -169,3 +169,40 @@ describe('flying and the simulation', () => {
     if (withSite.failedPhase !== 'coast') expect(withSite.cause).toBe('comms'); // the lock and the simulation agree
   });
 });
+
+describe('the free return and the entry corridor', () => {
+  const inp = (seed: number) => ({ chapter, questions, conflicts, decisions: SAFE, seed, events: [] as typeof events });
+  const quiet = [...Array(400).keys()].find((s) => base(SAFE, s).success)!; // a seed whose dice let the ship through
+  it('skipping the Moon-orbit burn brings the crew home without landing: an abort', () => {
+    const o = simulate(inp(quiet), { liftoff: 'fair', tli: 'fair', freeReturn: true, reentry: { angle: -6.3, ok: true } });
+    expect(o.success).toBe(false); expect(o.cause).toBe('abort'); expect(o.failedPhase).toBe('orbit');
+    const at = (p: string) => o.phases.find((x) => x.phase === p)!;
+    expect(at('orbit').skipped).toBe(true); expect(at('landing').reached).toBe(false);
+    expect(at('return').roll).not.toBeNull(); // the trip home still rolls its dice
+  });
+  it('a part can still fail on the free return home', () => {
+    const bad = [...Array(2000).keys()].find((s) => { const o = simulate(inp(s), { freeReturn: true }); return o.cause === 'hardware'; });
+    expect(bad).toBeDefined();
+    expect(simulate(inp(bad!), { freeReturn: true }).failedPhase).toBe('return');
+  });
+  it('a missed entry corridor loses the crew at the end of the return', () => {
+    const o = simulate(inp(quiet), { liftoff: 'fair', tli: 'fair', orbit: 'fair', landing: { landed: true, tries: 1, site: 'flat', speed: 2, fuelLeft: 0.4 }, tei: 'fair', reentry: { angle: -8.4, ok: false } });
+    expect(o.success).toBe(false); expect(o.cause).toBe('reentry'); expect(o.failedPhase).toBe('return');
+  });
+  it('the injection burns are recorded on their phases', () => {
+    const o = simulate(inp(quiet), { liftoff: 'clean', tli: 'fair', orbit: 'clean', tei: 'rough' });
+    expect(o.phases.find((p) => p.phase === 'coast')!.flown).toBe('fair');
+    expect(o.phases.find((p) => p.phase === 'return')!.flown).toBe('rough');
+  });
+  it('flying saved before these moments existed still simulates', () => {
+    const o = simulate(inp(quiet), { liftoff: 'fair', orbit: 'fair', landing: { landed: true, tries: 1, site: 'flat', speed: 2, fuelLeft: 0.4 } });
+    expect(o.success).toBe(true);
+  });
+  it('a free return costs less trust than a lost crew, and leaves no debris', () => {
+    const m = initialMeters(chapter);
+    const abort = simulate(inp(quiet), { freeReturn: true });
+    const lost = simulate(inp(quiet), { reentry: { angle: -9, ok: false } });
+    const ra = resolveRun(m, chapter, abort.totals, abort, [], false), rl = resolveRun(m, chapter, lost.totals, lost, [], false);
+    expect(ra.meters.trust).toBeGreaterThan(rl.meters.trust); expect(ra.meters.debris).toBeLessThan(rl.meters.debris);
+  });
+});

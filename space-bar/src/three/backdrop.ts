@@ -35,12 +35,12 @@ export class Backdrop {
 
   constructor(host: HTMLElement) {
     this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-    this.renderer.toneMapping = THREE.ACESFilmicToneMapping; this.renderer.toneMappingExposure = 1.15;
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping; this.renderer.toneMappingExposure = 1.0;
     const el = this.renderer.domElement; el.className = 'backdrop'; el.setAttribute('aria-hidden', 'true'); host.prepend(el);
 
     this.space.add(this.world.group);
     this.space.add(new THREE.HemisphereLight(0xbcd0ff, 0x1a1c22, 0.9));
-    const rim = new THREE.DirectionalLight(0x6f9bff, 1.4); rim.position.set(-5, 1, -4); this.space.add(rim);
+    const rim = new THREE.DirectionalLight(0xaabbd1, 0.65); rim.position.set(-5, 1, -4); this.space.add(rim);
     const key = new THREE.DirectionalLight(0xfff2dd, 2.2); key.position.set(4, 6, 5); this.space.add(key);
     this.shipRoot.add(this.ship); this.shipRoot.scale.setScalar(1.12); this.space.add(this.shipRoot);
     this.shipRoot.visible = false;
@@ -241,7 +241,7 @@ export class Backdrop {
     this.yawUser += this.yawVel; this.yawVel *= 0.93; this.yawUser *= 0.997;
     this.yaw = 0.7 + (reduced ? 0 : Math.sin(t * 0.22) * 0.3) + this.yawUser; // a calm three-quarter sway instead of a full spin
     this.shipRoot.rotation.set(0.16, this.yaw, -0.32);
-    this.shipRoot.position.y = Math.sin(t * 0.6) * 0.18;
+    this.shipRoot.position.y = reduced ? 0 : Math.sin(t * 0.6) * 0.18;
     this.kick *= 0.9;
     const kx = (Math.random() - 0.5) * this.kick * 0.5, ky = (Math.random() - 0.5) * this.kick * 0.5;
     if (this.mode === 'orbit') {
@@ -249,7 +249,7 @@ export class Backdrop {
       this.camera.lookAt(0, -0.4, 0);
     } else {
       // title and story screens: a slow float over the horizon of the Earth
-      this.camera.position.set(Math.sin(t * 0.07) * 2.2 + this.mx * 1.2, 1.2 - this.my * 0.6 + Math.sin(t * 0.09) * 0.5 + ky, 14);
+      this.camera.position.set((reduced ? 0 : Math.sin(t * 0.07) * 2.2) + this.mx * 1.2, 1.2 - this.my * 0.6 + (reduced ? 0 : Math.sin(t * 0.09) * 0.5) + ky, 14);
       this.camera.lookAt(0, -1.2, -60);
     }
     void p;

@@ -129,3 +129,42 @@ kbd { font: .75rem var(--mono); border: 1px solid #666; border-radius: 4px; padd
 }
 
 [tabindex="-1"]:focus, [tabindex="-1"]:focus-visible { outline: none; }
+/* report: Apollo 11's burns, NASA beside GMAT */
+.apollo-burns { margin-top: 14px; }
+.apollo-burns h4 { margin: 0 0 8px; font-size: .95rem; }
+.apollo-burns table { width: 100%; border-collapse: collapse; font-size: .88rem; }
+.apollo-burns th, .apollo-burns td { padding: 6px 8px 6px 0; border-bottom: 1px solid var(--line); text-align: right; vertical-align: top; }
+.apollo-burns th:first-child, .apollo-burns tbody th { text-align: left; font-weight: 600; }
+.apollo-burns tbody th small { display: block; font-weight: 400; opacity: .7; }
+.apollo-burns td.wide { color: var(--amber); }
+/* achievements: the pop-up after a flight and the title panel */
+.ach-art { display: block; flex: none; width: 48px; height: 48px; }
+.ach-art svg { display: block; width: 100%; height: 100%; }
+.ach-x { flex: none; width: 36px; height: 36px; display: grid; place-items: center; background: transparent; color: var(--dim); border: 1px solid var(--line); border-radius: 0; font: 1.3rem/1 var(--sans); cursor: pointer; }
+.ach-x:hover, .ach-x:focus-visible { color: var(--text); border-color: var(--amber); }
+.ach-toasts { position: fixed; left: 16px; bottom: 64px; z-index: 130; width: min(360px, calc(100vw - 32px)); display: grid; gap: 8px; }
+.ach-toast { display: flex; align-items: center; gap: 12px; padding: 10px 10px 10px 12px; background: rgba(10,15,22,.92); border: 1px solid var(--line); border-left: 3px solid var(--amber); color: var(--text);
+  box-shadow: 0 10px 30px rgba(0,0,0,.5); animation: ach-in .35s cubic-bezier(.2,.8,.2,1) both; transition: opacity .4s; }
+.ach-toast.out { opacity: 0; }
+.ach-toast-text { flex: 1; min-width: 0; display: grid; }
+.ach-toast-text small { font: .7rem var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--amber); }
+.ach-toast-text b { overflow-wrap: anywhere; }
+@keyframes ach-in { from { opacity: 0; transform: translateX(-24px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .ach-toast { animation: none; } }
+.ach-panel { width: min(760px, calc(100vw - 32px)); max-width: none; max-height: calc(100dvh - 32px); margin: auto; padding: 0; overflow: auto; overscroll-behavior: contain;
+  background: var(--panel); color: var(--text); border: 1px solid var(--line); border-top: 3px solid var(--amber); }
+.ach-panel::backdrop { background: rgba(2,4,10,.72); }
+.ach-body { padding: 18px 16px 20px; }
+.ach-body header { display: flex; align-items: center; gap: 12px; }
+.ach-body h2 { margin: 0; flex: 1; font-size: 1.3rem; }
+.ach-count { font: .85rem var(--mono); color: var(--amber); }
+.ach-body > .fine { margin: 4px 0 14px; }
+.ach-grid { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); }
+.ach-item { display: flex; gap: 12px; align-items: flex-start; padding: 10px 12px; background: var(--panel2); border: 1px solid var(--line); min-width: 0; }
+.ach-item > div { min-width: 0; display: grid; }
+.ach-item b { overflow-wrap: anywhere; }
+.ach-item p { margin: 2px 0 0; font-size: .85rem; color: var(--dim); }
+.ach-state { font: .66rem var(--mono); letter-spacing: .12em; text-transform: uppercase; }
+.ach-item.got .ach-state { color: var(--ok); }
+.ach-item.locked .ach-art { opacity: .35; filter: grayscale(1); }
+.ach-item.locked b { color: var(--dim); }

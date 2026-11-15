@@ -4,7 +4,7 @@
 // Join them with:
 //   ffmpeg -i demo/video.webm -i demo/audio.webm -filter_complex "[1:a]adelay=OFFSET:all=1,apad[a]" -map 0:v -map "[a]" -c:v libx264 -crf 27 -pix_fmt yuv420p -c:a aac -shortest demo/space-bar-demo.mp4
 const { chromium } = require('playwright-core');
-const { liftoffByHand, orbitByHand } = require('./e2e.cjs');
+const { liftoffByHand, burnByHand, corridorByHand } = require('./e2e.cjs');
 const path = require('path'); const fs = require('fs');
 const BASE = process.env.BASE || 'http://localhost:5173';
 const OUT = path.join(__dirname, '..', 'demo'); fs.mkdirSync(OUT, { recursive: true });
@@ -90,10 +90,17 @@ const tap = () => {
   await page.waitForSelector('.howto .start', { timeout: 30000 }); await sleep(5200);
   await click('.howto .start'); await sleep(1200);
   await liftoffByHand(page);
-  // Moon orbit: read the card, press Start, turn the ship round, burn into the band
-  await page.waitForSelector('.fly-layer[data-moment="orbit"] .howto .start', { timeout: 60000 }); await sleep(5200);
+  // Earth orbit: read the card, press Start, burn up to the speed that reaches the Moon
+  await page.waitForSelector('.fly-layer[data-moment="tli"] .howto .start', { timeout: 60000 }); await sleep(6500);
   await click('.howto .start'); await sleep(900);
-  await orbitByHand(page);
+  await burnByHand(page, 'tli');
+  // the coast: watch the clock and the "why" lines, then speed time up
+  await page.waitForSelector('.fly-layer[data-moment="coast"]', { timeout: 20000 }); await sleep(14000);
+  await click('.warp-btn[data-warp="faster"]');
+  // Moon orbit: read the card, press Start, turn the ship round, burn into the band
+  await page.waitForSelector('.fly-layer[data-moment="orbit"] .howto .start', { timeout: 90000 }); await sleep(6500);
+  await click('.howto .start'); await sleep(900);
+  await burnByHand(page, 'orbit');
   // the landing site
   await page.waitForSelector('.site[data-site="flat"]', { timeout: 20000 }); await sleep(2600);
   await click('.site[data-site="flat"]');
@@ -111,6 +118,15 @@ const tap = () => {
     await sleep(25);
   }
   for (const k of Object.keys(keys)) await set(k, false);
+  // home: the burn out of lunar orbit, the coast, the entry corridor, re-entry
+  await page.waitForSelector('.fly-layer[data-moment="orbit"] .howto .start', { timeout: 60000 }); await sleep(5500);
+  await click('.howto .start'); await sleep(900);
+  await burnByHand(page, 'tei');
+  await page.waitForSelector('.fly-layer[data-moment="coast"]', { timeout: 20000 }); await sleep(9000);
+  await click('.warp-btn[data-warp="faster"]');
+  await page.waitForSelector('.fly-layer[data-moment="corridor"] .howto .start', { timeout: 90000 }); await sleep(6500);
+  await click('.howto .start'); await sleep(900);
+  await corridorByHand(page);
 
   await page.waitForFunction(() => document.body.dataset.screen === 'paper', null, { timeout: 120000 });
   await sleep(5000);
