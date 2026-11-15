@@ -117,6 +117,22 @@ Energy used to climb against gravity is estimated during positive radial motion 
 
 These values are instructional estimates: they separate two major ascent losses, but do not constitute a complete engine or thermodynamic energy audit.
 
-## Vehicle data
+## Earth–Moon transfer
 
-Dimensions and engine data are stored in `src/data/rockets.ts` and `src/data/parts/index.ts`. Vehicle-specific references are listed in `src/data/sources.ts` and on the in-game Sources & Credits page. The repository currently has no challenge-provided `/data/sources/` directory, so official NASA and manufacturer sources are used directly.
+Stage E uses a two-body patched-conic approximation. Outside the Moon’s sphere of influence the spacecraft follows an Earth-centred Kepler orbit. Inside that sphere it follows a Moon-centred Kepler orbit. This is intentionally not an n-body model.
+
+For a parking-orbit radius `r₁` and the Moon’s orbital semi-major axis `r₂`, the transfer ellipse has:
+
+`aₜ = (r₁ + r₂) / 2`
+
+`ΔvTLI = √(μEarth/r₁) [√(2r₂/(r₁+r₂)) − 1]`
+
+`ttransfer = π √(aₜ³/μEarth)`
+
+The launch-window phase angle is derived from the transfer time and the Moon’s mean orbital rate. During coast, elliptic states are propagated analytically by solving Kepler’s equation. Lunar-orbit insertion compares the actual Moon-relative arrival speed with circular speed `√(μMoon/r)` and subtracts the required braking impulse from remaining delta-v.
+
+The constants for Earth radius and `μ`, Moon radius and `μ`, mean Earth–Moon distance, and Moon sphere-of-influence radius come from the NASA/JPL Planetary Fact Sheet registry described above. Landing uses the existing fixed-step lunar landing model; its outcome, rather than a scripted checkpoint, advances the journey state. Re-entry classification receives its shallow and steep corridor from the selected mission data so an unsourced corridor is never silently invented.
+
+## Vehicle data and provenance
+
+Dimensions and engine data are stored in `src/data/rockets.ts` and `src/data/parts/index.ts`. Audited mission and capability records live in `src/data/truth/`; every non-identity field carries document, location, retrieval date, and verification status. Downloaded source snapshots live in `data/sources/`, and the same registry is visible on the in-game Sources page.
