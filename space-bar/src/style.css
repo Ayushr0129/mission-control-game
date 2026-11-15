@@ -177,3 +177,13 @@ kbd { font: .75rem var(--mono); border: 1px solid #666; border-radius: 4px; padd
 .ach-item.got .ach-state { color: var(--ok); }
 .ach-item.locked .ach-art { opacity: .35; filter: grayscale(1); }
 .ach-item.locked b { color: var(--dim); }
+
+/* Historical campaign step-by-step navigation */
+.hc-header { grid-template-columns: auto 1fr auto auto; gap: 18px; }
+.hc-header .hc-back { border-color: #658394; background: #102733; font-weight: 700; }
+.hc-header .hc-back:hover, .hc-header .hc-back:focus-visible { color: #07131b; background: #dce8ee; }
+@media (max-width: 760px) {
+  .hc-header { grid-template-columns: auto 1fr auto; gap: 8px; }
+  .hc-header > div b { font-size: .72rem; }
+  .hc-header .hc-back { padding: 9px 8px; }
+}
