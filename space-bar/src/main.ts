@@ -20,6 +20,7 @@ import { landingSetup } from './sim/landing';
 import { siteOverloadsLink } from './sim/simulate';
 import { missionLab, preferenceControls, uiText } from './missionlab';
 import { historicalCampaign } from './ui/historicalCampaign';
+import { guidedMission } from './ui/guidedMission';
 import { SIMULATION_SOURCES } from './data/sources';
 import { realFlightView } from './ui/realFlightView';
 import { SOURCE_DOCUMENTS, TRUTH_MISSIONS, TRUTH_ROCKETS } from './data/truth';
@@ -42,7 +43,7 @@ const roleOwns: Record<Role | 'crew', string> = {
   engineer: 'The spacecraft: strength, reliability, mass and power', scientist: 'What the mission does on arrival', crew: 'Decisions everyone shares',
 };
 
-type Screen = 'gate' | 'title' | 'campaign' | 'brief' | 'scene' | 'news' | 'build' | 'poll' | 'paper' | 'report' | 'collapse' | 'done' | 'data' | 'shared' | 'lab' | 'real' | 'chapters';
+type Screen = 'gate' | 'title' | 'guided' | 'campaign' | 'brief' | 'scene' | 'news' | 'build' | 'poll' | 'paper' | 'report' | 'collapse' | 'done' | 'data' | 'shared' | 'lab' | 'real' | 'chapters';
 type Item = { t: 'scene'; qid: string } | { t: 'news'; ev: GameEvent };
 
 const qs = new URLSearchParams(location.search);
@@ -91,9 +92,9 @@ function render() {
   else bd.showWorld();
   document.body.dataset.screen = screen;
   app.replaceChildren();
-  const view = ({ gate, title, campaign: () => historicalCampaign(() => go('title')), brief, scene, news, build, poll, paper, report, collapse, done, data: dataScreen, shared, chapters, lab: () => missionLab(() => go('title')), real: () => realFlightView(() => { history.replaceState(null, '', location.pathname); go('title'); }) } as Record<Screen, () => HTMLElement>)[screen]();
+  const view = ({ gate, title, guided: () => guidedMission(() => go('title')), campaign: () => historicalCampaign(() => go('title')), brief, scene, news, build, poll, paper, report, collapse, done, data: dataScreen, shared, chapters, lab: () => missionLab(() => go('title')), real: () => realFlightView(() => { history.replaceState(null, '', location.pathname); go('title'); }) } as Record<Screen, () => HTMLElement>)[screen]();
   app.append(view);
-  if (!['gate', 'title', 'lab', 'campaign', 'real'].includes(screen)) app.append(h('button', { type: 'button', class: 'global-home', onclick: () => go('title'), 'aria-label': uiText('Back to start page', "Retour à la page d'accueil") }, `⌂ ${uiText('Start', 'Accueil')}`));
+  if (!['gate', 'title', 'guided', 'lab', 'campaign', 'real'].includes(screen)) app.append(h('button', { type: 'button', class: 'global-home', onclick: () => go('title'), 'aria-label': uiText('Back to start page', "Retour à la page d'accueil") }, `⌂ ${uiText('Start', 'Accueil')}`));
   (app.querySelector('h1,h2') as HTMLElement | null)?.focus?.({ preventScroll: true });
 }
 
@@ -177,9 +178,11 @@ function title() {
     h('h1', { tabindex: '-1' }, h('span', { class: 'a' }, 'Space'), h('span', { class: 'b' }, 'Bar')),
     h('p', { class: 'tag chapter' }, h('i', {}), uiText(`Chapter ${chapter.id}: ${chapter.title}`, `Chapitre ${chapter.id} : Course vers la Lune`), h('i', {})),
     h('p', { class: 'sub' }, uiText('Three people will climb into a machine you designed.', 'Trois personnes monteront dans une machine que vous avez conçue.')));
-  const menu = h('div', { class: 'menu', hidden: playing },
-    h('div', { class: 'row' }, btn(uiText('Open Mission Lab'), () => { sfx.ambient(true); go('lab'); }, 'btn primary big'), btn(uiText('Take the job', 'Accepter la mission'), () => { sfx.ambient(true); go('brief'); }, 'btn ghost'), btn(uiText('Play historical campaign'), () => { sfx.ambient(true); go('campaign'); }, 'btn ghost'), achBtn, btn(uiText('Data and sources'), () => go('data'), 'btn ghost')),
-    h('p', { class: 'fine' }, uiText('Engineer a complete mission, assemble the vehicle piece by piece, fly it yourself, earn achievements, dock and deploy a scientific payload—or enter the historical Moon-race campaign.')),
+  const menu = h('div', { class: 'menu student-menu', hidden: playing },
+    h('button', { class: 'btn primary big student-start', type: 'button', onclick: () => { sfx.ambient(true); go('guided'); } }, uiText('Start Guided Orbit Mission', 'Commencer la mission orbitale guidée')),
+    h('p', { class: 'student-promise' }, uiText('Configure a Saturn V, fly to orbit with real physics, and learn why every engineering choice matters.', 'Configurez une Saturn V, atteignez l’orbite avec une physique réelle et découvrez pourquoi chaque choix compte.')),
+    h('details', { class: 'mode-drawer' }, h('summary', {}, uiText('Explore all game modes', 'Explorer tous les modes de jeu')), h('div', { class: 'row' }, btn(uiText('Open Mission Lab'), () => { sfx.ambient(true); go('lab'); }, 'btn ghost'), btn(uiText('Take the job', 'Accepter la mission'), () => { sfx.ambient(true); go('brief'); }, 'btn ghost'), btn(uiText('Play historical campaign'), () => { sfx.ambient(true); go('campaign'); }, 'btn ghost'), achBtn, btn(uiText('Data and sources'), () => go('data'), 'btn ghost'))),
+    h('p', { class: 'fine' }, uiText('The full sandbox, historical campaign, achievements, docking, mission data and free-flight tools remain available under Explore all game modes.', 'Le bac à sable, la campagne historique, les succès, l’amarrage, les données et le vol libre restent disponibles dans Explorer tous les modes.')),
     preferenceControls(refreshPreferenceUi, 'title-preferences'),
     (lessons > 0 || fallen.length > 0 || held > 0) && h('p', { class: 'fine' },
       fallen.length > 0 && `${fallen.length} crew${fallen.length > 1 ? 's' : ''} lost. `, lessons > 0 && `${lessons} lesson${lessons > 1 ? 's' : ''} remembered. `,
