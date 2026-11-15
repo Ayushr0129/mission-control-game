@@ -69,10 +69,10 @@ describe('headless RK4 ascent', () => {
   });
 });
 
-function flyPreset(id: string) {
+function flyPreset(id: string, payloadMassKg?: number) {
   const blueprint = ROCKET_PRESETS.find((rocket) => rocket.id === id)!;
   const baseSpec = ascentVehicleSpec(blueprint);
-  const spec = id === 'falcon-9' ? { ...baseSpec, payloadMassKg: 0 } : baseSpec;
+  const spec = { ...baseSpec, payloadMassKg: payloadMassKg ?? (id === 'falcon-9' ? 0 : baseSpec.payloadMassKg) };
   const env = environment(true);
   let state = createRealAscent(spec, env);
   const pitchProgram = id === 'saturn-v' ? SATURN_V_PITCH_PROGRAM : FALCON_9_PITCH_PROGRAM;
@@ -97,6 +97,11 @@ describe('reference pitch-program pilots', () => {
     expect(result.telemetry.apoapsisM).toBeGreaterThan(150_000);
     expect(result.telemetry.periapsisM).toBeGreaterThanOrEqual(150_000);
     expect(result.state.events.some((event) => event.includes('SEPARATION'))).toBe(true);
+  });
+
+  it('guided Saturn V reaches orbit with a heavier payload', () => {
+    const result = flyPreset('saturn-v', 50_000);
+    expect(result.telemetry.stableParkingOrbit, JSON.stringify(result.telemetry)).toBe(true);
   });
 
   it('holding only the engine burns the first stage but never reaches orbit', () => {
