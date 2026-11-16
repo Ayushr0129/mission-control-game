@@ -1,138 +1,188 @@
-# MISSION CONTROL — Beyond the Launch
+# Space Bar
 
-An offline-first Flutter / Flame space mission engineering game created for a NASA Space Apps hackathon concept. Independent project; no NASA affiliation or endorsement.
+**Build a spacecraft. Fly a real trajectory. Learn why missions succeed.**
 
-## What is playable
+Space Bar is a bilingual educational space-mission game for students ages 10–16. It combines a part-by-part vehicle builder, mission management, historical campaigns, docking and payload operations with a deterministic SI-unit flight simulation.
 
-Four connected campaign missions: reach space, Earth orbit, lunar flyby, and robotic lunar landing. Build a modular spacecraft, review real-time engineering constraints, control an animated ascent, jettison an interstage, respond to an anomaly, execute manoeuvres, operate instruments, and transmit science. The lunar mission includes a fuel-limited interactive descent with a 5 m/s touchdown limit.
+The project was created for the NASA International Space Apps Challenge. It is an independent educational project and is not affiliated with or endorsed by NASA.
 
-A complete campaign includes funding, public trust, reputation, science, sequential mission unlocks, eight earned achievements, and automatic local saves. Free Play unlocks all four missions and bypasses campaign spending and progression. Historical intermissions are skippable. The NASA gallery is optional, has timeouts and offline field notes, and stores discovery metadata locally. Original procedural art and synthesized sound work offline; mute and volume controls are in Settings.
+## What students can do
 
-## Play in Safari without installing developer tools
+- Configure and fly a guided Saturn V mission from the launch pad to a stable Earth orbit.
+- Assemble rockets from individual engines, tanks, interstages, fairings, fins, landing equipment, control systems and payload components.
+- Attach repeated parts and build laterally as well as vertically for boosters, satellites, stations and rovers.
+- Compare payload mass, launch mass, thrust-to-weight ratio, delta-v, power and mission cost.
+- Fly manually with throttle, attitude, staging and RCS controls, or enable optional guidance.
+- Observe drag, Max-Q, changing mass, gravity turns, staging, apoapsis, periapsis and orbital insertion.
+- Practice rendezvous and docking, deploy scientific payloads and construct modular orbital vehicles.
+- Explore five data-driven spacecraft presets: Saturn V, Falcon 9, Falcon Heavy, Space Shuttle Discovery and Starship.
+- Play a historical Moon-race campaign with mission decisions, achievements, stories and sourced mission data.
+- Use the game in English or French, in light or dark mode.
 
-The existing Flutter / Flame game now has a GitHub Pages workflow, Safari-oriented bootstrap, responsive desktop/mobile controls, and flight keyboard shortcuts. See [the GitHub Pages guide](docs/GITHUB_PAGES.md) for merging the dedicated branch, enabling Pages, the expected URL, bandwidth details and verification limits. A URL is live only after the deployment job succeeds; a pushed branch is not a successful deployment.
+No account is required. Designs, preferences, achievements and supported mission progress are stored locally in the browser.
 
-## Requirements and running
+## Guided Orbit Mission
 
-- Flutter stable 3.47.9 / Dart 3.13.7 was used for verification. Minimum Dart constraint: 3.10.
-- Android Studio with Android SDK / command-line tools, platform 36, current build tools, NDK 28.2.13676358, and Java 17 or newer for Android builds. Flutter provisions matching components when SDK licences are accepted.
-- Xcode and CocoaPods on macOS for iOS. iOS source is included; it has not been built in this Linux environment.
-- A modern browser for the web edition.
+The recommended starting point is **Start Guided Orbit Mission**. It is a short classroom-friendly path through the complete engineering loop:
 
-```sh
-flutter pub get
-flutter run                         # select a connected device
-flutter run -d chrome               # browser development
-flutter build apk --release --target-platform android-arm64 --no-shrink
-flutter build apk --release         # configure your own signing before distribution
-flutter build ios --no-codesign     # macOS only
-flutter build web --release --no-web-resources-cdn --no-wasm-dry-run
-flutter analyze
-flutter test
+1. Read the mission objective.
+2. Choose a payload and review its effect on mass, cost and TWR.
+3. Launch a part-assembled Saturn V using the real flight model.
+4. Follow a visible checklist through liftoff, gravity turn, Max-Q, staging and orbit.
+5. Review maximum altitude and speed, remaining fuel, periapsis, drag loss and gravity loss.
+6. Replay the flight or change the payload to compare the result.
+
+Assisted flight runs at accelerated simulation time but uses the same fixed-step physics as manual flight. The full sandbox, historical campaign, achievements, docking, mission data and free-flight tools remain available under **Explore all game modes**.
+
+## Flight model
+
+The current ascent simulation is UI-independent, deterministic and calculated in SI units. It includes:
+
+- thrust along the vehicle body axis;
+- propellant mass flow using engine thrust and specific impulse;
+- inverse-square gravity;
+- altitude-dependent atmosphere and aerodynamic drag opposing air-relative velocity;
+- Earth-rotation velocity at the launch site;
+- changing vehicle mass and stage separation;
+- part-derived diameter, drag coefficient and engine performance;
+- rate-limited steering and an optional gravity-turn pilot;
+- dynamic pressure and structural-limit checks;
+- state-vector orbit calculations for apoapsis, periapsis, eccentricity and period;
+- stable-orbit detection based on periapsis rather than altitude alone.
+
+See [`space-bar/docs/PHYSICS.md`](space-bar/docs/PHYSICS.md) for equations, constants, assumptions and sources.
+
+## Run locally
+
+The current game lives in [`space-bar/`](space-bar/).
+
+### Requirements
+
+- Node.js 20 or newer
+- npm
+- A modern desktop or mobile browser
+
+```bash
+cd space-bar
+npm install
+npm run dev
 ```
 
-The supplied Android APK, when present, is an ARM64 **release-mode build signed with a development key**, suitable for local sideload testing, not Play Store submission. Other device architectures require a rebuild. Android INTERNET permission is used only for the optional gallery.
+Open the local address printed by Vite, normally <http://localhost:5173>.
 
-To serve the prebuilt web edition, extract the web archive and run `python3 -m http.server 8080` inside it, then open http://localhost:8080. Do not open index.html directly from the filesystem. All renderer files, fonts, mission data and audio are bundled. Serving over HTTP is still required. No external request is needed to play. A service worker / installable offline PWA is not claimed; use the Android application for installation and offline relaunch.
+### Useful commands
 
-## Quick flight guide
-
-1. Choose a mission and press **Design spacecraft** for the physical rocket builder. Use **Load mission baseline** or assemble individual catalogue parts yourself.
-2. Review connections, fuel routing, stage order, payload, electricity and the displayed cost. **Launch assembled rocket** buys the actual vehicle once; there are no refunds after commitment.
-3. All new flights use a circular planet with gravity toward its centre, weakening as inverse-square distance, plus atmospheric drag that fades with altitude. Space ignites/cuts engines, A/D rotate, and P pauses/resumes; touch buttons provide the same controls. The camera follows the rocket with a pinned altitude/speed/fuel HUD. Use **Planet scale** to see the circular body or **Follow rocket** for close control; the camera zoom slider spans both. The predicted coast line includes drag and excludes future thrust. Use throttle and stage depleted boosters. Inspect the live coast trajectory, apoapsis and periapsis in the map.
-4. Choose **1×, 2×, 5×, 10× or 25×**. Use **Auto-pause** for a timer, 100 km, stable orbit or the next apsis. Targets pause and reset to 1×; they do not steer. For orbital practice, load the orbital example and enable its optional flight tutor.
-5. At the mission's actual space/orbit gate, operate the retained spacecraft through story events, manoeuvres, science and downlink. Lunar terminal descent uses the actual remaining engines and fuel.
-6. Return and choose **Continue mission** to restore paused at 1× without another procurement charge.
-
-See [the detailed flight guide](docs/ROCKET_ASSEMBLY.md) for construction, the orbital procedure and simplified physics.
-
-## Preserved subsystem planner flight guide
-
-The earlier component-selector campaign remains available through **Subsystem design planner**. Its launcher, guidance and descent controls differ from the physical assembly mode:
-
-1. Enter mission control, choose an unlocked mission, and read or skip its historical briefing.
-2. In the Vehicle Lab, choose components. A selected part can be removed by tapping it again. Alternatives replace other parts in the same subsystem; science instruments can be combined.
-3. Use **Load a recommended baseline** if you want a known viable starting point. The default spacecraft is already suitable for Reach Space.
-4. Resolve every readiness warning, then proceed to launch. The launch expenditure is charged immediately in campaign mode.
-5. Keep throttle at 100% for liftoff. Pitch bias 0 follows the training gravity turn. After T+80 s, separate the inert interstage. Simulation time runs at 5×. You can pause at any time.
-6. In mission operations, choose a response to the seeded event. Each choice has a different cost in power, manoeuvre reserve or scientific yield. Execute the mission steps and transmit data to complete the mission.
-7. For lunar descent, coast to gain a little downward speed, use engine thrust to brake, then modulate near 38% throttle to balance lunar gravity. Touch down at 0–5 m/s. The lander starts 1,500 m above the surface with finite fuel. Brake early; a sustained full-throttle burn will make it climb.
-8. Saves run every two seconds and on major actions. Return to the console and choose **Continue mission** to resume paused. Settings can abandon an active flight; its cost remains spent.
-
-Budget caps are per mission; programme funds are a separate constraint. A failure costs invested funds and 18 public-trust points, but does not automatically end the programme. Campaign closure occurs below $5M funding (the minimum base launcher procurement cost), or at zero public trust. Start a new campaign or use Free Play to continue experimenting. The reset action confirms replacement of an existing campaign.
-
-## Architecture
-
-```
-lib/main.dart                    imports and app definition
-lib/app/bootstrap.dart           bounded startup, loading errors and retry
-lib/app/controller.dart          navigation, active session orchestration, persistence
-lib/screens/console.dart         responsive shell, overview, missions, briefings
-lib/screens/mission_screens.dart vehicle lab, flight controls, operations, debrief
-lib/screens/extras.dart          achievements, NASA gallery, settings
-lib/models/models.dart          typed components, missions and programme state
-lib/services/engineering.dart   mass, cost, power, rocket equation, readiness
-lib/services/flight.dart        deterministic launch integrator and snapshots
-lib/services/operations.dart    anomalies, mission steps, power and lunar descent
-lib/services/campaign.dart      spending, outcomes, progression and achievements
-lib/services/storage.dart       versioned local JSON, persistent/session fallback
-lib/services/audio.dart         platform audio export
-lib/services/audio_web.dart     gesture-activated Web Audio, original WAV assets
-lib/services/audio_native.dart  original native audioplayers playback
-lib/game/mission_game.dart      Flame animated flight rendering and time stepping
-lib/widgets/                   reusable controls and original procedural artwork
-assets/data/                   local mission and component JSON
-assets/audio/                  original synthesized WAV files
-assets/fonts/                  Space Grotesk, JetBrains Mono and OFL licences
+```bash
+npm run lint       # TypeScript checks
+npm test           # Vitest unit and simulation tests
+npm run build      # Type-check and create the production build in dist/
+npm run preview    # Preview the production build
+npm run e2e        # Browser flow test; start the dev server first
 ```
 
-Screen and controller files use Dart library `part` declarations to share session state while keeping rendering separate from testable simulation services. No backend, accounts or API keys. `pubspec.lock` is committed for reproducibility.
+Additional trajectory and GMAT commands are documented in [`space-bar/README.md`](space-bar/README.md) and [`space-bar/gmat/README.md`](space-bar/gmat/README.md).
 
-## Engineering and educational assumptions
+## Controls
 
-- Spacecraft wet mass = dry mass + propellant mass. Cost includes a fictional $5M launcher procurement cost. All component specifications, budgets and event magnitudes are **illustrative game values**, not real NASA hardware specifications.
-- Spacecraft delta-v uses the Tsiolkovsky rocket equation: `Isp × 9.80665 × ln(wet mass / dry mass)`. Readiness requires the manoeuvre budget plus a 150 m/s contingency reserve. Delta-v expenditures are additive ideal impulsive changes in velocity; this omits finite-burn and navigation details.
-- Power balance = generated watts − consumed watts. Timed operations integrate the deficit/surplus into a 300 Wh battery, with upper/lower limits. Safe mode reduces draw at the cost of science. Earth–Moon distance is treated as constant for solar power.
-- The **separate launch vehicle** begins with 180,000 kg propellant, 8,500 kg dry structure, 6,000 kg jettisonable inert interstage, 3 MN thrust and 390 s Isp. Liftoff TWR includes the spacecraft payload and interstage. The spacecraft's engine is for space operations, not pad liftoff. This is an intentionally idealized launcher, not a replica of any real rocket.
-- Launch integrates mass flow `thrust / (Isp × g0)`, thrust acceleration, altitude-dependent gravity, simple exponential-atmosphere drag and a prescribed gravity turn. The pitch slider biases guidance by ±15°. The visual interstage is inert mass jettison, **not a fully simulated second propulsion stage**. Ascent uses small substeps and 5× time compression.
-- The orbit training check requires altitude 100–450 km, horizontal velocity at least 7.6 km/s and vertical speed below 2.5 km/s, then a 250 m/s circularisation operation. **It is an insertion approximation, not proof of a closed or long-lived orbit.** A real orbit solution requires position/velocity propagation and periapsis calculation. Altitude alone never awards an orbit.
-- Lunar transfer budgets are simplified total delta-v targets, with landing split 68% transfer / 32% arrival. There is no full transfer-orbit propagation or calendar-time simulation.
-- Lunar descent is an abstract terminal approach with 1.62 m/s² gravity, 4.3 m/s² maximum thrust acceleration, normalized fuel and a 5 m/s touchdown limit. Its separate descent gauge abstracts the arrival propellant allowance already budgeted in spacecraft delta-v. Fuel mass, thrust changes and attitude are not fully coupled in this terminal model.
-- Three anomalies are selected using a seeded Dart PRNG. Saved sessions preserve the actual selected event and its resolution, so loading does not reroll it. There are no cosmetic choices with identical state outcomes.
-- Mission success requires science collection and a completed downlink, not only arrival. Campaign settlement is guarded against repeated rewards by the controller. Free Play does not award campaign achievements or grant money.
+### Real-flight ascent
 
-Historical notes cover Vostok 1 (12 April 1961), Sputnik 1 (4 October 1957), Luna 3 (October 1959), Luna 9 (February 1966), and Apollo 11 (July 1969). These factual intermissions are distinct from the fictional programme.
+| Input | Action |
+| --- | --- |
+| `Space` | Hold engine thrust |
+| `↑` / `↓` | Increase or decrease throttle |
+| `←` / `→` | Rotate the vehicle |
+| `Enter` | Separate a depleted stage |
+| `T` | Change flight assist |
+| `M` | Toggle the orbital map |
 
-## Assets and NASA gallery
+### Docking
 
-Earth, Moon, starfield, rocket, spacecraft modules and sound effects are original procedural work. Font files are distributed with their SIL Open Font License texts. NASA Image and Video Library search uses `https://images-api.nasa.gov/search`, requires no private key, displays returned titles/descriptions and centre/photographer credits, and persists metadata. Image pixels require connectivity and are not cached for guaranteed offline use. NASA search can return separately credited material; consult each entry's source and rights before redistributing it. No copyrighted mission footage is bundled.
+| Input | Action |
+| --- | --- |
+| `W` / `A` / `S` / `D` | RCS translation |
+| `Q` / `E` | Rotation |
 
-## Verification and limitations
+Touch and on-screen controls are provided where applicable. Each flight lesson also includes contextual explanations and optional assistance.
 
-See `VERIFICATION.md` for the exact commands and outcomes executed for this delivery.
+## Technology
 
-This is a hackathon MVP with four missions, not a comprehensive aerospace simulator. Future rover, human and Mars missions are clearly marked as future content. Technology variety is available in the workshop; there is no separate research tree. There is no account sync, cloud save, real-time mission ephemeris, APK store signing, multiplayer or production accessibility audit. Local save data can be lost when browser/site storage is cleared or the mobile app is uninstalled. A resumed flight starts paused. NASA availability never gates gameplay.
+- TypeScript
+- Vite
+- Three.js and WebGL
+- HTML and CSS
+- Vitest
+- Browser local storage
+- Optional WebXR on compatible HTTPS-served browsers and headsets
+- NASA GMAT reference scripts and saved comparison output
 
-Planned improvements: computed periapsis and apogee, actual multistage propulsion, coupled lunar propellant mass, more campaigns, optional cloud backup, native device performance testing and broader accessibility verification.
+The simulation, data/domain layer and UI are separated so that flight behavior can be tested without rendering the game.
 
-Optional browser flow regression: install Python Playwright, serve the web build on port 8080, then run `python3 tool/browser_e2e.py`. Set `CHROMIUM_PATH` to a Chromium executable and optionally `MISSION_URL` and `MISSION_QA_OUTPUT`. This script blocks requests outside the local game origin to verify core offline behavior. It writes screenshots under `work/browser-qa` by default.
+## Project structure
 
-## Mission design trade-offs
+```text
+space-bar/
+├── src/
+│   ├── data/          spacecraft, parts, missions, story and sourced truth data
+│   ├── domain/        immutable vehicle calculations and simulation domain
+│   ├── sim/           ascent, orbit, landing and trajectory solvers
+│   ├── three/         Three.js scenes and flight rendering
+│   ├── ui/            builder, campaign, guided mission, reports and controls
+│   ├── main.ts        application flow and title screen
+│   └── prefs.ts       language and theme preferences
+├── tests/             physics, campaign, data, visuals and session tests
+├── data/sources/      source registry and supporting references
+├── docs/              physics, design and data-audit documentation
+├── gmat/              GMAT scripts and saved comparison data
+└── public/            static assets
+```
 
-The Vehicle Lab now includes a mission requirements review and three fictional launchers. Scout lowers procurement cost but limits payload to 1,500 kg; the original Atlas training launcher supports 5,000 kg; Titan costs more and supports 8,000 kg. Selection changes actual launch mass, thrust and propellant as well as campaign expenditure. Spacecraft manoeuvre reserve, science and communications requirements remain independent of launcher size. Recommended designs reset to the original launcher.
+## Data and educational design
 
-Review budget, payload, power and manoeuvre margins before launch. Pin a design, change a subsystem or launcher, and compare resource changes; the comparison is kept for the current app session only. Existing campaign saves default to the original launcher, and new saves retain the selected launcher and active-flight configuration. Post-mission debriefs show the design resources and science transmitted. Launcher prices and scaling are illustrative training models, not real vehicle specifications. Solo play is supported; online multiplayer and arbitrary orbit design are not implemented.
+Rocket dimensions, mission records and truth-layer values are kept separate from simulation results. Source records include document, location, retrieval date and status. Approximate or placeholder values remain labelled instead of being presented as verified facts.
 
-## Part-by-part rocket construction and mission flight
+The game is designed to make engineering trade-offs visible rather than hide them behind a success button. A heavier payload changes acceleration and fuel margin. Empty stages must be discarded. Vertical altitude alone does not create orbit; students must build sufficient horizontal speed while controlling atmospheric and gravity losses.
 
-**Design spacecraft** in a mission briefing now opens the physical builder. Navigation also includes **Rocket assembly**. The previous component selector remains under **Subsystem planner**. Training is available through **Build & fly a rocket**.
+Educational explanations are optional and event-driven. They appear when real simulation events occur, including liftoff, drag, Max-Q, staging and stable orbit.
 
-Build using 19 typed parts with individual prices and specifications; drag from the catalogue, move/rotate/duplicate/remove, undo/redo and pan/zoom. Multi-cell tanks, side boosters, editable decoupler order, compatible fuels and explicit crossfeed affect the actual flight vehicle. Campaign launches charge the displayed procurement total plus a $1M pad fee once, and retained hardware drives science, power, communications and manoeuvre operations. The orbital example and optional feedback tutor fly through the same physics.
+## Accuracy and limitations
 
-See [the construction, flight and mission guide](docs/ROCKET_ASSEMBLY.md) for controls, a verified orbital procedure, budget/refund rules, save migration and physical assumptions. Transfer/encounter story phases remain a delta-v-budget abstraction; Earth flight and lunar terminal descent use the 2D point-mass model. Existing campaign features and original music are retained.
+Space Bar is an educational simulator, not certified mission-design software. Important simplifications include:
 
-## Original music
+- patched-conic/two-body approximations instead of a complete n-body ephemeris;
+- simplified attitude, RCS, heating, reliability and communications models;
+- impulsive or compressed classroom transitions in selected campaign phases;
+- no aerodynamic lift model;
+- accelerated time in guided lessons.
 
-Settings includes **Background music**, a track selector and **Music volume**, independent of the master volume and effects channel. **Mission Control** is a calm 48-second instrumental loop; **Beyond the Horizon** is a more rhythmic 32-second instrumental song. Both are original procedural compositions with no samples or external recordings. The two bundled mono MP3 files total about 470 KiB and need no streaming connection. Music starts after a user gesture, continues alongside effects/engine audio and through the assembly simulator, stops when muted/disabled or the app backgrounds, and resumes on a subsequent interaction. Preferences survive reloads; legacy saves use conservative defaults. Safari may require Settings → Enable sound. These are instrumental tracks without vocals.
+These simplifications are documented and are kept separate from sourced historical measurements. The project should not be used for operational aerospace decisions.
 
-`tool/compose_music.py` reproduces the compositions using numpy and ffmpeg in a developer/cloud environment; neither is needed to play the game. Music assets and the composition script are original project material.
+## Historical campaign and other modes
+
+The historical campaign includes briefings, vehicle selection, an encyclopedia, the rocket editor, launch confirmation, flight and results. Players can navigate back through appropriate campaign windows before committing irreversible actions. Confirmed mission transitions are autosaved.
+
+The complete game also retains:
+
+- the Mission Lab construction sandbox;
+- campaign stories and achievements;
+- the five prebuilt vehicle database;
+- manual real-flight mode;
+- docking and guided rendezvous practice;
+- satellites, rovers and orbital construction;
+- planetary and spacecraft learning views;
+- data-and-sources pages;
+- post-flight educational reports.
+
+## Legacy Flutter prototype
+
+The repository root also contains the earlier Flutter/Flame **Mission Control — Beyond the Launch** prototype (`lib/`, `android/`, `ios/`, `web/` and `pubspec.yaml`). It is preserved for reference, but the actively developed Space Bar game and the version described in this README are in [`space-bar/`](space-bar/).
+
+## Credits and sources
+
+Detailed source attribution is available inside the game under **Data and sources**, and in:
+
+- [`space-bar/data/sources/`](space-bar/data/sources/)
+- [`space-bar/docs/DATA-TODO.md`](space-bar/docs/DATA-TODO.md)
+- [`space-bar/docs/PHYSICS.md`](space-bar/docs/PHYSICS.md)
+- [`space-bar/gmat/README.md`](space-bar/gmat/README.md)
+
+Historical names and spacecraft remain the property of their respective organizations. Project code, game systems and original interface assets are provided through this repository.
