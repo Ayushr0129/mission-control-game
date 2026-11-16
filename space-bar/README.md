@@ -1,6 +1,8 @@
 # Space Bar
 
-Chapter 1: Race to the Moon. A browser game for NASA Space Apps Challenge, Port Louis, Mauritius.
+An educational browser-based spaceflight simulator for students, developed for the NASA International Space Apps Challenge in Port Louis, Mauritius.
+
+The recommended entry point is **Start Guided Orbit Mission**: choose a Saturn V payload, follow a fixed-step SI-unit ascent through liftoff, Max-Q, gravity turn and staging, then review orbital speed, fuel margin and flight losses. The complete Mission Lab, historical campaign, achievements, docking, payload operations and free-flight tools remain available under **Explore all game modes**.
 
 You run a 1960s Moon program. You make three decisions, build the rocket on the pad part by part, and fly the mission yourself, on Apollo 11's real path: liftoff, the burn out of Earth orbit, the coast to the Moon in time warp, the burn into Moon orbit, the landing, the burn for home and the entry corridor. Real NASA history is behind it, and the report checks Apollo 11's burns against NASA's GMAT trajectory software.
 
@@ -95,7 +97,7 @@ Historical Campaign hardware is data-driven and runtime-validated:
 
 To add a part, add one entry to the appropriate category array in `src/data/parts/index.ts`. Supply all shared fields and the fields required by that category; startup validation and TypeScript will report missing or duplicate data. To add a rocket, add a `RocketBlueprint` to `src/data/rockets.ts` using existing part IDs. No domain or UI changes are required.
 
-The Historical Campaign is deliberately forward-only. Every irreversible transition is confirmed and autosaved. Its only exit is **Pause → Save & Quit to Main Menu**.
+The Historical Campaign confirms and autosaves irreversible transitions. Back controls allow players to revisit appropriate earlier windows before commitment, and **Pause → Save & Quit to Main Menu** safely leaves the campaign.
 
 The sourced campaign covers nine flight eras: Sputnik, Mercury, Gemini, Apollo 8, Apollo 11, STS-31, the first Falcon 9 land landing, the Psyche Falcon Heavy launch, and Starship’s first integrated test flight. Experimental flights are labelled separately from historical operational missions. Rocket cards remain visible when locked and explain whether the blocker is era, destination, crew rating, payload capacity, or missing verified vehicle data. **What if?** mode permits documented alternatives without rewriting history.
 
